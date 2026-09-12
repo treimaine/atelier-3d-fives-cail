@@ -4,7 +4,7 @@
 
 L’éditeur conserve l’emprise et les poteaux estimés de l’étude. La V4 ajoute un fond de plan calibrable, des pièces polygonales liées à leurs murs, des contraintes géométriques, deux modèles GLB détaillés et des contrôles d’implantation. Les anciens projets restent importables.
 
-Ouvrir `Editeur_3D_Hub_Creatif.html` avec le dossier `editor-assets` à côté. Pour l’aperçu local : `node editor-assets/preview.cjs`, puis `http://127.0.0.1:8766`. Le serveur est limité à la boucle locale et aux fichiers de l’éditeur.
+L’application vit dans le dépôt `atelier-3d-fives-cail/` — en ligne sur https://github.com/treimaine/atelier-3d-fives-cail. Ouvrir `index.html` suffit. Pour l’aperçu local : `node editor-assets/preview.cjs` depuis ce dossier, puis `http://127.0.0.1:8766` ; le serveur est limité à la boucle locale. La mise en ligne est décrite dans `DEPLOIEMENT_VERCEL.md`.
 
 ## Calibrer un plan
 
@@ -309,4 +309,10 @@ Les modèles détaillés — 25 Mo pour le fauteuil, le canapé et la plante —
 Validation : 107 tests automatisés. Les nouveaux couvrent le déplacement d'un espace avec et sans son contenu, le redimensionnement par poignée avec côté opposé fixe et taille minimale, le quart de tour emportant le mobilier, le maintien de la protection sur les murs et les poteaux seuls, la présence des neuf poignées sur chacun des huit espaces, et la priorité des poignées sur les corps.
 
 Essais dans le navigateur intégré : studio audio déplacé de +1,00 / +0,50 m avec ses cinq objets en une seule annulation, redimensionné de 6,50 à 5,00 m par sa poignée de côté, studio podcast pivoté d'un quart de tour avec report du chevauchement créé ; paquet de déploiement servi et ouvert depuis sa racine, console vide, tous les modules présents.
+
+## Emplacement des fichiers — 12 septembre 2026
+
+L’éditeur n’est plus à la racine du dossier de travail : il constitue son propre dépôt, `atelier-3d-fives-cail/`, poussé sur GitHub et branché sur Vercel. La copie qui subsistait à la racine a été retirée pour qu’aucune modification ne se perde entre deux exemplaires.
+
+Ce qui ne part pas sur GitHub est rangé dans `atelier-3d-sources/` : les modèles Khronos d’origine au format `.glb` (43 Mo, qui servent à régénérer les fichiers `.js` embarqués), les scripts de migration déjà appliqués, et trois états antérieurs de l’éditeur. Rien de tout cela n’est nécessaire pour faire tourner ou déployer l’application.
 
