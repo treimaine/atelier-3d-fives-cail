@@ -1,0 +1,8 @@
+# Sources binaires des modèles : régénérables depuis glTF-Sample-Assets
+editor-assets/models/*.glb
+
+# Système
+.DS_Store
+Thumbs.db
+
+node_modules/
