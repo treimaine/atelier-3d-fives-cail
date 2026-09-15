@@ -70,6 +70,38 @@
 
 #sceneCaption.compact .eyebrow,#sceneCaption.compact h1{display:none}
 
+/* Menu Affichage posé sur la maquette */
+#displayMenu{position:absolute;top:62px;right:16px;z-index:5;width:min(270px,calc(100% - 32px));max-height:calc(100% - 90px);overflow:auto;background:#1f2a25f5;color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:6px 14px 12px;box-shadow:0 10px 40px #0005}
+#displayMenu section{border-top:1px solid var(--line);padding-top:4px}
+#displayMenu section:first-child{border-top:0}
+#displayMenu h4{margin:10px 0 2px;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:#acb8b0}
+#displayMenu .check{margin:8px 0}
+#displayMenuButton.active{background:#334d3d;color:white}
+
+/* Consultation en lecture seule */
+#readOnlyBanner{position:absolute;left:50%;top:62px;transform:translateX(-50%);z-index:4;display:flex;align-items:center;gap:12px;flex-wrap:wrap;justify-content:center;max-width:calc(100% - 32px);background:#2f3f5a;color:white;border:1px solid #6d8fc4;border-radius:10px;padding:8px 10px 8px 14px;box-shadow:0 6px 24px #0004;font-size:12px}
+#readOnlyBanner div{display:flex;gap:6px}
+#readOnlyBanner button{font-size:11px;padding:6px 10px}
+body.read-only #library{opacity:.6}
+body.read-only #viewport{box-shadow:inset 0 0 0 3px #6d8fc4}
+.cloud-version.is-viewing{background:#2a3547;border-radius:8px;padding-left:8px;padding-right:8px}
+.cloud-version.is-archived{opacity:.7}
+.cloud-badge.archived{background:#4a4036;color:#f1d7bd}
+.cloud-thumb{display:block;width:100%;aspect-ratio:8/5;object-fit:cover;border-radius:6px;background:#2c3632;margin-bottom:8px}
+.cloud-version-actions button.primary{font-weight:600}
+#cloudMembers{margin-top:16px}
+.cloud-member{padding:10px 0;border-top:1px solid #303b34;overflow-wrap:anywhere}
+.cloud-member small{display:block;margin:3px 0;color:var(--muted);font-size:11px}
+.cloud-member.inactive strong{color:var(--muted)}
+#cloudAdminTools .check{margin:4px 0 10px;font-size:11px;color:var(--muted)}
+
+/* Menu contextuel */
+.context-menu{position:fixed;z-index:20;min-width:200px;background:#1f2a25;border:1px solid #4a574f;border-radius:8px;padding:4px;box-shadow:0 10px 30px #0006}
+.context-title{font-size:10px;letter-spacing:1px;color:var(--muted);padding:6px 10px 4px;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.context-menu button{display:flex;width:100%;justify-content:space-between;gap:16px;background:transparent;border:0;border-radius:5px;padding:7px 10px;text-align:left;font-size:12px}
+.context-menu button:hover,.context-menu button:focus-visible{background:#38483c;outline:none}
+.context-menu kbd{font:10px inherit;color:var(--muted)}
+
 /* Saisie de nom dans le panneau (variantes, vues) */
 .name-form{background:#222d27;border:1px solid var(--line);border-radius:8px;padding:6px 10px 10px;margin:0 0 10px}
 .name-form .field{margin-top:4px}

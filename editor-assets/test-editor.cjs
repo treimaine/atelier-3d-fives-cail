@@ -457,6 +457,27 @@ test('Hover cursor tells what can be grabbed',()=>{
  run('tool="select";setHover({kind:"walls",i:0})');assert.equal(run('hoverGroup.children.length'),1);
  run('setHover(null)');assert.equal(run('hoverGroup.children.length'),0);
 });
+test('A read-only consultation refuses edits, history steps and local saves',()=>{
+ run('state=validate(clone(DEFAULT_STATE));selection=null;undoStack.length=0;commit(()=>{state.walls[0].h=3})');
+ const h=run('state.walls[0].h'),undo=run('undoStack.length');
+ run('var persisted=0;var realPersist=persistProject;dbPut=async()=>{persisted++;return true;};readOnly={title:"Paul"}');
+ run('commit(()=>{state.walls[0].h=1})');assert.equal(run('state.walls[0].h'),h);assert.equal(run('undoStack.length'),undo);
+ run('historyStep()');assert.equal(run('state.walls[0].h'),h);
+ run('persistPending=null;persistProject()');assert.equal(run('persistPending'),null);
+ run('beginPlacement({type:"table",w:1,d:1,h:1})');assert.equal(run('placementDraft'),null);
+ run('readOnly=null');
+});
+test('The context menu offers the actions of the element, and only safe ones in consultation',()=>{
+ run('state=validate(clone(DEFAULT_STATE));demo();selection={kind:"furniture",i:0}');
+ const labels=()=>JSON.parse(run('JSON.stringify(contextActions().map(a=>a.label))'));
+ assert.deepEqual(labels(),['Propriétés','Cadrer','Tourner de 90°','Verrouiller','Dupliquer','Supprimer']);
+ run('selection={kind:"open",wi:state.walls.findIndex(w=>w.op.length),oi:0}');
+ assert.deepEqual(labels(),['Propriétés','Cadrer','Sélectionner le mur','Supprimer']);
+ run('readOnly={title:"Paul"}');assert.deepEqual(labels(),['Propriétés','Cadrer','Sélectionner le mur']);run('readOnly=null');
+ assert.equal(run('JSON.stringify(contextTarget({kind:"end",i:3,end:1}))'),JSON.stringify({kind:'walls',i:3}));
+ assert.equal(run('contextTarget({kind:"slab"})'),null);
+ run('selection=null');
+});
 test('Walls and columns are no longer behind a drag protection',()=>{
  assert.equal(run('typeof lockBuilding'),'undefined');
  assert.equal(run('typeof dragBlocked'),'undefined');

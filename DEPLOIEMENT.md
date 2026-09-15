@@ -58,7 +58,7 @@ Le résultat doit afficher une ligne. Zéro ligne signifie que l’adresse n’a
 
 Communiquer vous-même l’URL et les identifiants à l’associé. Il utilise le même écran de connexion que l’administrateur. Le rôle `member` permet de lire et créer des versions ; le rôle `admin` permet en plus de choisir la référence.
 
-Pour retirer l’accès, passer `active` à `false` pour ce membre dans le Table Editor. Les copies qu’il avait déjà téléchargées sur son appareil restent sur cet appareil.
+Pour retirer l’accès, utiliser **Membres de l’équipe** dans l’onglet Équipe (après la migration 003), ou passer `active` à `false` pour ce membre dans le Table Editor. Les copies qu’il avait déjà téléchargées sur son appareil restent sur cet appareil.
 
 ## Travailler ensemble
 
@@ -66,8 +66,11 @@ La colonne de droite a deux onglets : **Sélection** (propriétés de l’élém
 
 - **Brouillon local** : chaque compte a sa propre sauvegarde dans le navigateur. Les mouvements d’objets ne sont pas partagés automatiquement.
 - **⇪ Partager une version** (en-tête) : ouvre l’onglet Équipe sur le formulaire. Donner un titre, éventuellement un commentaire, puis **Partager cette version**. Cela crée une nouvelle version datée, attribuée à votre compte.
-- **↻ Actualiser** : récupérer les dernières propositions et demandes. Les versions s’affichent par pages de 20.
-- **Ouvrir** : charger une copie d’une proposition pour la consulter ou la modifier. Le brouillon précédent est mis de côté dans une copie de secours locale avant remplacement.
+- **↻ Actualiser** : récupérer les dernières propositions et demandes. Les versions s’affichent par pages de 20, avec une vignette de la vue au moment du partage.
+- **👁 Consulter** : afficher une proposition en lecture seule, sans toucher à votre brouillon. Un bandeau bleu propose **Revenir à mon brouillon** ou **Modifier une copie**. Pendant la consultation, rien n’est modifiable ni sauvegardé.
+- **Ouvrir une copie** : remplacer votre maquette par une copie modifiable. Le brouillon précédent est mis de côté dans la copie de secours locale.
+- **Archiver / Restaurer** (administrateur) : masquer une version de la liste sans la supprimer ; la case **Afficher les versions archivées** les fait réapparaître. La version de référence ne peut pas être archivée.
+- **Membres de l’équipe** (administrateur, en bas de l’onglet Équipe) : nommer un administrateur, repasser associé, retirer ou rétablir un accès. Vous ne pouvez pas retirer vos propres droits, et l’atelier garde toujours un administrateur actif.
 - **Retrouver mon travail d’avant la dernière ouverture** : revenir à cette copie de secours. Un seul emplacement de secours est conservé par compte et appareil.
 - **Définir comme référence** : action administrateur. Un nouvel appareil part de cette version. Les personnes ayant un brouillon le conservent et peuvent cliquer sur **Ouvrir la version de référence**.
 - **Exporter le projet .json** : désormais dans la colonne de gauche, section **Fichiers & exports**.
@@ -96,6 +99,8 @@ node --test editor-assets/test-cloud.cjs
 node editor-assets/preview.cjs
 ```
 
-Le schéma est conservé dans `supabase/001_shared_projects.sql` puis `supabase/002_self_signup.sql` pour reproduire la configuration dans un projet neuf : ne pas les rejouer dans le projet déjà configuré. `supabase/test_permissions.sql` et `supabase/test_signup.sql` testent les droits dans une transaction annulée, sans conserver les utilisateurs ou fichiers de test.
+Le schéma est conservé dans `supabase/001_shared_projects.sql`, `002_self_signup.sql` puis `003_team_thumbnails.sql` pour reproduire la configuration dans un projet neuf : ne jamais rejouer un script déjà exécuté. `test_permissions.sql`, `test_signup.sql` et `test_team.sql` testent les droits dans une transaction annulée, sans conserver les utilisateurs ou fichiers de test.
+
+Tant que `003_team_thumbnails.sql` n’est pas exécuté, l’atelier fonctionne comme avant (sans vignettes, archivage ni gestion des membres) et l’administrateur voit un rappel dans l’onglet Équipe. La console du navigateur affiche alors une erreur 400 attendue : c’est la vérification de ces nouvelles colonnes.
 
 Le SDK Supabase 2.116.0 est embarqué dans `editor-assets/vendor`, sous licence MIT. Aucun outil de build ni installation npm n’est nécessaire pour déployer.

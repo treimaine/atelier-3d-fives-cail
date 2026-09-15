@@ -29,6 +29,7 @@ function dbGet(key){return openProjectDb().then(db=>db&&new Promise(resolve=>{
 // Écriture différée : un glissement ne doit pas déclencher une transaction par image.
 let persistTimer=null,persistPending=null;
 function persistProject(){
+ if(typeof readOnly!=='undefined'&&readOnly)return;
  persistPending={payload:snapshot(),key:projectStorageKey(),localKey:projectLocalKey(KEY)};
  if(persistTimer)return;
  persistTimer=setTimeout(()=>{persistTimer=null;const {payload,key,localKey}=persistPending;persistPending=null;
@@ -58,7 +59,7 @@ async function loadProject(){
  if(shared)return {raw:shared,source:'partage'};
  return null;}
 async function reloadSharedProject(){
- if(busy)return;
+ if(busy||readOnlyBlocked())return;
  const raw=await fetchSharedProject();
  if(!raw){notify('Aucun projet partagé publié à côté de l’application.');return;}
  busy=true;
@@ -88,6 +89,7 @@ async function readProjectBackup(){
   try{const entry=JSON.parse(raw);if(entry&&typeof entry.project==='string')return entry;if(entry&&entry.walls)return {reason:'ouverture d’une version',date:null,project:raw};}catch{}}
  return null;}
 async function restoreProjectBackup(){
+ if(readOnly)throw Error('Revenez d’abord à votre brouillon : la consultation en cours est en lecture seule.');
  const entry=await readProjectBackup();
  if(!entry)throw Error('Aucune copie de secours sur cet appareil.');
  busy=true;
@@ -113,7 +115,7 @@ function variantMetrics(v){const scene={...state,furniture:v.furniture,zones:v.z
   hard:report.hard.length,doors:report.doors.length,clear:report.clear.length,
   area:v.furniture.reduce((n,f)=>n+f.w*f.d,0)};}
 function saveLayoutVariant(name){commit(()=>{state.variants=[...(state.variants||[]),variantSnapshot(name)].slice(-MAX_VARIANTS);});}
-async function applyLayoutVariant(id){const v=(state.variants||[]).find(x=>x.id===id);if(!v||busy)return;
+async function applyLayoutVariant(id){const v=(state.variants||[]).find(x=>x.id===id);if(!v||busy||readOnlyBlocked())return;
  try{await backupBeforeReplace('la variante « '+v.n+' »');}catch(e){notify(e.message);return;}
  commit(()=>{state.furniture=clone(v.furniture);state.zones=clone(v.zones);selection=null;});
  notify('Variante « '+v.n+' » appliquée. L’implantation précédente est dans la copie de secours.');}
