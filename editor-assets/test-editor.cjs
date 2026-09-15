@@ -4,7 +4,8 @@ function element(id=''){if(elements.has(id))return elements.get(id);const e={val
 class Renderer{constructor(){this.shadowMap={};this.info={memory:{}};}setPixelRatio(){}setSize(){}render(){}}
 const store=new Map();const ctx=vm.createContext({THREE:{...THREE,WebGLRenderer:Renderer},document:{getElementById:element,createElement:()=>element(),querySelectorAll:()=>[]},localStorage:{getItem:k=>store.get(k)||null,setItem:(k,v)=>store.set(k,v)},devicePixelRatio:1,ResizeObserver:class{observe(){}},requestAnimationFrame(){},addEventListener(){},setTimeout(){return 0;},clearTimeout(){},console,TextDecoder,DataView,Uint8Array,ArrayBuffer,Math,Blob,URL,atob,btoa});
 vm.runInContext(fs.readFileSync(__dirname+'/defaults.js','utf8'),ctx);vm.runInContext(fs.readFileSync(__dirname+'/architecture-core.js','utf8'),ctx);vm.runInContext(fs.readFileSync(__dirname+'/architecture-ui.js','utf8'),ctx);vm.runInContext(fs.readFileSync(__dirname+'/navigation.js','utf8'),ctx);vm.runInContext(fs.readFileSync(__dirname+'/manipulation.js','utf8'),ctx);vm.runInContext(fs.readFileSync(__dirname+'/equipment.js','utf8'),ctx);vm.runInContext(fs.readFileSync(__dirname+'/building.js','utf8'),ctx);vm.runInContext(fs.readFileSync(__dirname+'/circulation.js','utf8'),ctx);vm.runInContext(fs.readFileSync(__dirname+'/project.js','utf8'),ctx);vm.runInContext(fs.readFileSync(__dirname+'/rooms.js','utf8'),ctx);vm.runInContext(fs.readFileSync(__dirname+'/editor.js','utf8').replace(/if\(typeof AtelierCloud[^\n]+\n?$/, ''),ctx);
-const run=s=>vm.runInContext(s,ctx);let tests=0;function test(name,fn){fn();tests++;console.log('PASS '+name);}
+// Tests share one editor context: they are queued and run strictly in order, awaiting async ones.
+const run=s=>vm.runInContext(s,ctx);let tests=0;const queue=[];function test(name,fn){queue.push([name,fn]);}
 test('Legacy defaults import with unchanged walls and openings',()=>{assert.equal(run('state.walls.length'),13);assert.equal(run('state.zones.length'),8);assert.equal(run('state.walls[1].op[0].w'),1.4);});
 test('L-shaped union excludes duplicate surfaces',()=>assert.ok(Math.abs(run('unionInside(state.zones)')-326)<1e-6));
 test('Outside L-shape is not inside the envelope',()=>assert.equal(run('inside(8,20)'),false));
@@ -287,17 +288,41 @@ test('A change marks the circulation analysis as stale',()=>{
  run('state=validate(clone(DEFAULT_STATE));analyseCirculation()');assert.equal(run('circulationStale'),false);
  run('commit(()=>state.furniture.push({type:"table2",x:17,z:3}))');assert.equal(run('circulationStale'),true);
 });
-test('Layout variants are stored, compared and applied without touching the shell',()=>{
+test('Layout variants are stored, compared and applied without touching the shell',async()=>{
+ run('var backupStore=new Map();dbPut=async(k,v)=>{backupStore.set(k,v);return true;};dbGet=async k=>backupStore.get(k)??null;loadAssets=async()=>new Map()');
  run('state=validate(clone(DEFAULT_STATE));selection=null;demo();saveLayoutVariant("Meublee")');
  assert.equal(run('state.variants.length'),1);
  assert.equal(run('state.variants[0].furniture.length'),46);
  run('commit(()=>{state.furniture=[];});saveLayoutVariant("Vide")');
  assert.equal(run('state.variants.length'),2);
  const shell=run('JSON.stringify(state.walls)');
- run('applyLayoutVariant(state.variants[0].id)');
+ await run('applyLayoutVariant(state.variants[0].id)');
  assert.equal(run('state.furniture.length'),46);
  assert.equal(run('JSON.stringify(state.walls)'),shell);
  run('historyStep()');assert.equal(run('state.furniture.length'),0);
+});
+test('Replacing the model keeps a swappable backup that survives the page',async()=>{
+ run('var stateBeforeBackupTest=snapshot()');
+ run('state=validate(clone(DEFAULT_STATE));selection=null;demo();state.meta.name="Mon travail"');
+ await run('backupBeforeReplace("le retour à l’étude initiale")');
+ run('state=validate(clone(DEFAULT_STATE));state.meta.name="Étude";undoStack.length=0');
+ // The undo history is gone (as after a reload), yet the backup brings the work back...
+ await run('restoreProjectBackup()');
+ assert.equal(run('state.meta.name'),'Mon travail');assert.equal(run('state.furniture.length'),46);
+ // ...and the replaced state becomes the new backup, so a mistaken restore is reversible.
+ const entry=JSON.parse(run('backupStore.get(projectLocalKey("avant-remplacement"))'));
+ assert.equal(JSON.parse(entry.project).meta.name,'Étude');assert.match(entry.reason,/récupération/);
+ // A failed write blocks the replacement instead of losing the work silently.
+ run('dbPut=async()=>null');
+ await assert.rejects(()=>run('backupBeforeReplace("test")'),/copie de secours/);
+ run('commit(()=>{state.variants=[{id:"v_empty",n:"Vide",date:"",furniture:[],zones:clone(state.zones)}];})');
+ await run('applyLayoutVariant("v_empty")');
+ assert.equal(run('state.furniture.length'),46);
+ run('dbPut=async(k,v)=>{backupStore.set(k,v);return true;}');
+ // Backups written by the previous release under the opening key are still found.
+ run('backupStore.clear();backupStore.set(projectLocalKey("avant-ouverture"),JSON.stringify({...clone(DEFAULT_STATE),meta:{name:"Ancienne copie"}}))');
+ assert.match(await run('readProjectBackup().then(e=>e.project)'),/Ancienne copie/);
+ run('state=JSON.parse(stateBeforeBackupTest);selection=null');
 });
 test('Variant comparison reports the metrics of each layout',()=>{
  const html=run('compareVariants()');
@@ -409,6 +434,29 @@ test('Editing a wall or a room never drags its linked neighbours along',()=>{
  // An edit that does not move anything keeps the links.
  run(square);run('commit(()=>{state.walls[0].h=3})');assert.equal(run('state.walls[0].n1+state.zones[0].nodes.join("")'),'aabcd');
 });
+test('A wall cut at 1.20 m is found by its trace, openings included, with a small margin',()=>{
+ run('var savedCutState=snapshot();state=validate({zones:[],furniture:[],walls:[{...DW(0,0,10,0,"cloison",.15),op:[{type:"porte",w:1,h:2.1,sill:0,d:5}]},{...DW(0,4,10,4,"cloison",.15),h:1}]})');
+ const at=(x,z,tol=.05)=>run(`JSON.stringify(cutWallAt({x:${x},z:${z}},${tol}))`);
+ assert.equal(at(2,.05),JSON.stringify({kind:'walls',i:0}));
+ assert.equal(at(5.3,0),JSON.stringify({kind:'open',wi:0,oi:0}));
+ assert.equal(at(2,.3),'null');
+ assert.equal(at(2,.3,.3),JSON.stringify({kind:'walls',i:0}));
+ // A low wall is not clipped by the cut: it keeps its ordinary faces and is not duplicated here.
+ assert.equal(at(2,4),'null');
+ assert.equal(at(12,0),'null');
+ run('state=JSON.parse(savedCutState)');
+});
+test('Hover cursor tells what can be grabbed',()=>{
+ run('tool="select";view="3d";state=validate(clone(DEFAULT_STATE))');
+ assert.equal(run('cursorFor({kind:"walls",i:0})'),'grab');
+ assert.equal(run('cursorFor({kind:"columns",i:0})'),'grab');
+ assert.equal(run('cursorFor({kind:"room",i:0,mode:"resize",axis:[1,1]})'),'nwse-resize');
+ assert.equal(run('cursorFor(null)'),'default');
+ run('tool="measure"');assert.equal(run('cursorFor({kind:"walls",i:0})'),'crosshair');
+ run('tool="navigate"');assert.equal(run('cursorFor(null)'),'grab');
+ run('tool="select";setHover({kind:"walls",i:0})');assert.equal(run('hoverGroup.children.length'),1);
+ run('setHover(null)');assert.equal(run('hoverGroup.children.length'),0);
+});
 test('Walls and columns are no longer behind a drag protection',()=>{
  assert.equal(run('typeof lockBuilding'),'undefined');
  assert.equal(run('typeof dragBlocked'),'undefined');
@@ -455,7 +503,10 @@ test('The whole floor of the study can be assigned to spaces',()=>{
  const left=run('Arch.area(buildingOutline())-unionInside(state.zones)');
  assert.ok(left<12,'reste '+left.toFixed(1)+' m2 hors zonage');
 });
-console.log('\n'+tests+' checks passed. Renderer is mocked; browser smoke tests are separate.');
+(async()=>{
+ for(const [name,fn] of queue){try{await fn();}catch(e){console.error('FAIL '+name);console.error(e);process.exit(1);}tests++;console.log('PASS '+name);}
+ console.log('\n'+tests+' checks passed. Renderer is mocked; browser smoke tests are separate.');
+})();
 if(process.argv.includes('--write-proposal'))fs.writeFileSync(__dirname+'/../Proposition_Hub_Fives_Cail.json',run('JSON.stringify(state,null,2)'));
 if(process.argv.includes('--write-proposal-v4')){
  const candidate=JSON.parse(run('snapshot()')),catalog=JSON.parse(run('JSON.stringify(BUNDLED_MODELS)'));

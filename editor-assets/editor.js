@@ -141,7 +141,7 @@ function furnitureModel(f){
 }
 
 // Renderer and architectural shell.
-const canvas=$('c'),scene=new THREE.Scene(),world=new THREE.Group(),helpers=new THREE.Group();scene.add(world,helpers);
+const canvas=$('c'),scene=new THREE.Scene(),world=new THREE.Group(),helpers=new THREE.Group(),hoverGroup=new THREE.Group();scene.add(world,helpers,hoverGroup);
 let renderer;
 try{renderer=new THREE.WebGLRenderer({canvas,antialias:true,preserveDrawingBuffer:true});}catch(e){$('loading').textContent='WebGL indisponible. Activez l’accélération graphique puis rechargez.';throw e;}
 renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.outputEncoding=THREE.sRGBEncoding;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=.88;renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;renderer.localClippingEnabled=true;
@@ -185,7 +185,7 @@ function wallModel(w,i){const g=new THREE.Group(),L=wallLength(w);g.position.set
  world.add(g);return g;
 }
 // Une sélection devenue vide (annulation, suppression, import) ne doit jamais atteindre le rendu.
-function rebuild(){buildPending=false;if(selection&&!selected())selection=null;manipulationDispose();disposeGroup(world);disposeGroup(helpers);grid.visible=$('showGrid').checked;$('cut').classList.toggle('active',cut);$('roof').classList.toggle('active',roofOn);
+function rebuild(){buildPending=false;if(selection&&!selected())selection=null;manipulationDispose();disposeGroup(world);disposeGroup(helpers);setHover(hovered,true);grid.visible=$('showGrid').checked;$('cut').classList.toggle('active',cut);$('roof').classList.toggle('active',roofOn);
  buildingSlab(-.2,.2,mats.concrete,'Dalle').userData.pick={kind:'slab'};
  buildingColumns().forEach(({x,z,w,d,h},i)=>{const g=new THREE.Group();g.userData.pick={kind:'columns',i};box(g,w,h,d,x-CX,h/2,z-CZ,mats.concrete);box(g,w+.07,.12,d+.07,x-CX,.06,z-CZ,mats.metal);world.add(g);});
  state.zones.forEach((z,i)=>{const tex=textures[z.surface].clone();tex.needsUpdate=true;const metre=1/(SURFACE_SIZE[z.surface]||2);tex.repeat.set(metre,metre);const mat=new THREE.MeshStandardMaterial({color:$('showZoning').checked?z.c:0xffffff,map:$('showZoning').checked?null:tex,roughness:z.surface==='concrete'?.6:.85});if($('showZoning').checked)tex.dispose();const points=Arch.polygon(z),shape=new THREE.Shape(points.map(v=>new THREE.Vector2(v.x-CX,-(v.z-CZ)))),geometry=new THREE.ExtrudeGeometry(shape,{depth:.025,bevelEnabled:false}),f=new THREE.Mesh(geometry,mat);f.rotation.x=-Math.PI/2;f.position.y=.006+i*.0001;f.receiveShadow=true;f.userData.pick={kind:'zones',i};world.add(f);
@@ -290,17 +290,58 @@ function choosePick(hits,current=selection){let nearest=null,preferred=null,colu
  if(preferred&&preferred.dist-nearest.dist<=PICK_TOLERANCE)return preferred.data;
  return nearest.data;
 }
+// Survol : le curseur et un contour bleu montrent ce qui se saisit avant le clic. Le contour vit
+// dans son propre groupe, pour ne jamais reconstruire la scène à chaque mouvement de souris.
+let hovered=null,hoverKey='',hoverEvent=null,hoverScheduled=false;
+const HOVER_COLOR=0x3f8fe0,GRAB_KINDS=new Set(['furniture','walls','columns','zones','open']);
+function hoverOutline(h){
+ if(h?.kind==='furniture'){const f=state.furniture[h.i];return f&&{pts:Arch.footprint(f),y:f.y+.1};}
+ if(h?.kind==='walls'){const w=state.walls[h.i];return w&&{pts:Arch.wallRect(w),y:.14};}
+ if(h?.kind==='columns'){const c=buildingColumns()[h.i];return c&&{pts:[[-1,-1],[1,-1],[1,1],[-1,1]].map(([a,b])=>({x:c.x+a*c.w/2,z:c.z+b*c.d/2})),y:.14};}
+ if(h?.kind==='zones'){const z=state.zones[h.i];return z&&{pts:Arch.polygon(z),y:.08};}
+ return null;}
+function setHover(h,force=false){const key=h?JSON.stringify(h):'';if(key===hoverKey&&!force)return;hovered=h;hoverKey=key;
+ for(const o of [...hoverGroup.children]){o.geometry.dispose();o.material.dispose();hoverGroup.remove(o);}
+ const o=h&&!samePick(h,selection)?hoverOutline(h):null;
+ if(o)line([...o.pts,o.pts[0]].map(v=>[v.x-CX,o.y,v.z-CZ]),HOVER_COLOR,hoverGroup);
+ dirty=true;}
+function cursorFor(h){
+ if(tool==='navigate')return 'grab';if(tool!=='select')return 'crosshair';if(view==='interior'||!h)return 'default';
+ if(HANDLE_KINDS.has(h.kind))return h.kind==='room'&&h.mode==='resize'?'nwse-resize':'move';
+ if(h.kind==='furniture'&&state.furniture[h.i]?.locked)return 'not-allowed';
+ return GRAB_KINDS.has(h.kind)?'grab':'default';}
+function hoverAt(e){hoverEvent=e;if(hoverScheduled)return;hoverScheduled=true;
+ requestAnimationFrame(()=>{hoverScheduled=false;if(pointer||busy||roomDragState||rotationDrag)return;
+  let h=tool==='select'&&view!=='interior'&&hoverEvent?pick(hoverEvent):null;if(h?.kind==='slab')h=null;
+  setHover(h);canvas.style.cursor=cursorFor(h);});}
+// La coupe à 1,20 m est un plan de découpe : la section d'un mur n'a pas de face, le rayon la
+// traverse jusqu'au sol. On retrouve donc le mur coupé par sa trace à la hauteur de coupe, avec
+// une marge de quelques pixels pour qu'une cloison fine reste attrapable en plan.
+const CUT_HEIGHT=1.2;
+function cutWallAt(q,tolerance){let best=null;
+ state.walls.forEach((w,i)=>{if(w.h<CUT_HEIGHT)return;const L=wallLength(w);if(L<1e-6)return;
+  const t=((q.x-w.x1)*(w.x2-w.x1)+(q.z-w.z1)*(w.z2-w.z1))/(L*L),d=Math.max(0,Math.min(1,t))*L;
+  const gap=Math.hypot(q.x-(w.x1+(w.x2-w.x1)*d/L),q.z-(w.z1+(w.z2-w.z1)*d/L))-w.t/2;
+  if(gap>tolerance||t<-.02||t>1.02||best&&gap>=best.gap)return;
+  const oi=w.op.findIndex(o=>Math.abs(o.d-d)<=o.w/2);
+  best={gap,data:oi>=0?{kind:'open',wi:i,oi}:{kind:'walls',i}};});
+ return best?.data||null;}
 function pick(e){cast(e);const hits=[];
  for(const h of ray.intersectObjects([...helpers.children,...world.children],true)){
   if(h.object.isSprite||h.object.isLine)continue;
   let o=h.object,data;while(o){if(o.userData.pick){data=o.userData.pick;break;}o=o.parent;}
-  if(!data)continue;if(cut&&(data.kind==='walls'||data.kind==='open')&&h.point.y>1.2)continue;
+  if(!data)continue;if(cut&&(data.kind==='walls'||data.kind==='open')&&h.point.y>CUT_HEIGHT)continue;
   hits.push({data,dist:h.distance});
   if(HANDLE_KINDS.has(data.kind))break;
  }
+ if(cut&&view!=='interior'){const q=planePoint(e,CUT_HEIGHT);
+  const tolerance=view==='plan'?Math.max(.05,7*dist/Math.max(1,canvas.clientHeight)):.05;
+  const data=q&&cutWallAt(q,tolerance);
+  if(data){hits.push({data,dist:ray.ray.origin.distanceTo(new THREE.Vector3(q.x-CX,CUT_HEIGHT,q.z-CZ))});hits.sort((a,b)=>a.dist-b.dist);}}
  return choosePick(hits);
 }
 canvas.addEventListener('contextmenu',e=>e.preventDefault());
+canvas.addEventListener('pointerleave',()=>{hoverEvent=null;if(!pointer){setHover(null);canvas.style.cursor=cursorFor(null);}});
 canvas.addEventListener('dblclick',e=>{if(busy||tool!=='select')return;const hit=pick(e);if(hit&&hit.kind!=='slab')return;const p=floorPoint(e);if(p)createRoomAt(p);});
 canvas.addEventListener('pointerdown',e=>{if(busy||e.button>2)return;stopNavigation();canvas.focus();const p=floorPoint(e),navGesture=e.button!==0||e.altKey||e.shiftKey||tool==='navigate';if(manipulationPointerDown(e,p))return;if(!navGesture&&architecturePointerDown(e,p))return;if(!navGesture&&tool!=='select'&&e.button===0){if(!p)return;const point=nearbyPoint(p);
  if(!firstPoint){firstPoint=point;rebuild();notify('Cliquez le deuxième point. Échap pour annuler.');return;}
@@ -311,9 +352,9 @@ canvas.addEventListener('pointerdown',e=>{if(busy||e.button>2)return;stopNavigat
  if(hit?.kind==='room'&&p){selection={kind:'zones',i:hit.i};if(roomPointerDown(hit,p)){canvas.setPointerCapture(e.pointerId);refresh();return;}}
  if(hit?.kind==='furniture'){chooseFurniture(hit.i);}else if(hit?.kind==='end')selection={kind:'walls',i:hit.i};else if(hit?.kind==='vertex')selection={kind:'zones',i:hit.i};else if(hit)selection=hit;else if(!navGesture)selection=null;
  const planeY=hit?.kind==='furniture'?state.furniture[hit.i]?.y||0:0;
- pointer={id:e.pointerId,startX:e.clientX,startY:e.clientY,lastX:e.clientX,lastY:e.clientY,point:planeY?planePoint(e,planeY):p,planeY,b:e.button,pan:e.button===1||e.button===2||e.shiftKey||tool==='navigate',hit:view==='interior'||hit?.kind==='furniture'&&selected()?.locked?null:hit,ids:hit?.kind==='furniture'?furnitureIndices():[],roomIds:hit?.kind==='zones'&&roomCarry?roomContents(state.zones[hit.i]):null,before:snapshot(),original:clone(selected()),moved:false};canvas.setPointerCapture(e.pointerId);refresh();
+ pointer={id:e.pointerId,startX:e.clientX,startY:e.clientY,lastX:e.clientX,lastY:e.clientY,point:planeY?planePoint(e,planeY):p,planeY,b:e.button,pan:e.button===1||e.button===2||e.shiftKey||tool==='navigate',hit:view==='interior'||hit?.kind==='furniture'&&selected()?.locked?null:hit,ids:hit?.kind==='furniture'?furnitureIndices():[],roomIds:hit?.kind==='zones'&&roomCarry?roomContents(state.zones[hit.i]):null,before:snapshot(),original:clone(selected()),moved:false};canvas.setPointerCapture(e.pointerId);setHover(null);canvas.style.cursor='grabbing';refresh();
 });
-canvas.addEventListener('pointermove',e=>{if(roomDragState){const q=planePoint(e,0);if(q)roomDragMove(q);return;}if(manipulationPointerMove(e))return;architecturePointerMove(e);if(!pointer)return;const d=pointer;const dx=e.clientX-d.lastX,dy=e.clientY-d.lastY;d.lastX=e.clientX;d.lastY=e.clientY;if(Math.hypot(e.clientX-d.startX,e.clientY-d.startY)>4)d.moved=true;if(!d.moved)return;
+canvas.addEventListener('pointermove',e=>{if(roomDragState){const q=planePoint(e,0);if(q)roomDragMove(q);return;}if(manipulationPointerMove(e))return;architecturePointerMove(e);if(!pointer){hoverAt(e);return;}const d=pointer;const dx=e.clientX-d.lastX,dy=e.clientY-d.lastY;d.lastX=e.clientX;d.lastY=e.clientY;if(Math.hypot(e.clientX-d.startX,e.clientY-d.startY)>4)d.moved=true;if(!d.moved)return;
  if(!d.hit){
   if(view==='interior'){yaw+=dx*.004;pitch=Math.max(-1.3,Math.min(1.3,pitch-dy*.004));}else if(d.pan||view==='plan'){panCamera(dx,dy);}else{theta-=dx*.006;phi=Math.max(.08,Math.min(1.5,phi-dy*.006));}updateCamera();return;}
  const p=planePoint(e,d.planeY||0),a=d.original;state=JSON.parse(d.before);const o=selected();if(!p||!d.point||!o)return;const x=snap(p.x-d.point.x),z=snap(p.z-d.point.z);
@@ -326,7 +367,7 @@ canvas.addEventListener('pointermove',e=>{if(roomDragState){const q=planePoint(e
  else if(selection.kind==='open'){const w=state.walls[selection.wi],L=wallLength(w);o.d=Math.max(o.w/2,Math.min(L-o.w/2,snap(((p.x-w.x1)*(w.x2-w.x1)+(p.z-w.z1)*(w.z2-w.z1))/L)));}
  try{isolateEdit(JSON.parse(d.before),state);Arch.propagate(JSON.parse(d.before),state);state=validate(state);d.error=null;}catch(e){d.error=e.message;state=JSON.parse(d.before);}requestBuild();
 });
-function endPointer(cancel=false){endRotation(cancel);roomDragEnd(cancel);if(!pointer)return;const d=pointer;pointer=null;if(d.hit&&d.moved){try{if(cancel)state=JSON.parse(d.before);else{if(d.error)throw Error(d.error);state=validate(state);record(d.before);}}catch(e){state=JSON.parse(d.before);notify(e.message+' Déplacement annulé.');}refresh();}}
+function endPointer(cancel=false){endRotation(cancel);roomDragEnd(cancel);canvas.style.cursor=cursorFor(null);if(!pointer)return;const d=pointer;pointer=null;if(d.hit&&d.moved){try{if(cancel)state=JSON.parse(d.before);else{if(d.error)throw Error(d.error);state=validate(state);record(d.before);}}catch(e){state=JSON.parse(d.before);notify(e.message+' Déplacement annulé.');}refresh();}}
 canvas.addEventListener('pointerup',()=>endPointer());canvas.addEventListener('pointercancel',()=>endPointer(true));
 canvas.addEventListener('wheel',navigationWheel,{passive:false});
 addEventListener('keydown',e=>{if(editingText(e.target)||busy||document.querySelector?.('dialog[open]'))return;if(manipulationKey(e))return;if(e.key==='Enter'&&tool==='polygon'){e.preventDefault();finishPolygon();return;}if(e.key==='Escape'){stopNavigation();architectureCancel();endPointer(true);setTool('select');notify('Outil annulé.');return;}if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){e.preventDefault();historyStep(e.shiftKey);return;}if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='y'){e.preventDefault();historyStep(true);return;}if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='d'){e.preventDefault();duplicate();return;}if(e.key==='Delete'){removeSelection();return;}navigationKeyDown(e);});
@@ -348,7 +389,7 @@ function download(blob,name){
 function fileName(ext){return 'HubFivesCail_'+state.meta.name.replace(/[^a-z0-9_-]+/gi,'_')+'_r'+String(state.meta.revision||0).padStart(3,'0')+'.'+ext;}
 // Chaque export porte son numéro de révision : deux fichiers d'une même étude restent distinguables.
 async function exportJson(){commit(()=>{state.meta.revision=(state.meta.revision||0)+1;state.meta.exported=new Date().toISOString().slice(0,10);});const project=clone(state);for(const asset of Object.values(project.assets)){if(asset.builtin){asset.data=await assetData(asset);}}download(new Blob([JSON.stringify(project,null,2)],{type:'application/json'}),fileName('json'));notify('Projet prêt en révision '+project.meta.revision+'. Cliquez sur le lien de téléchargement.');}
-async function importJson(file){if(!file)return;if(file.size>150*1024*1024){notify('Projet trop volumineux (150 Mo maximum).');return;}busy=true;try{const raw=JSON.parse(await file.text());if(raw.zones&&!raw.walls)raw.walls=clone(DEFAULT_STATE.walls);if(!raw.furniture)raw.furniture=[];const candidate=validate(raw);for(const id of Object.keys(candidate.assets)){if(state.assets[id]&&(state.assets[id].data!==candidate.assets[id].data||state.assets[id].builtin!==candidate.assets[id].builtin)){const next=id+'_'+Date.now();candidate.assets[next]=candidate.assets[id];delete candidate.assets[id];candidate.furniture.forEach(f=>{if(f.assetId===id)f.assetId=next;});}}const assets=await loadAssets(candidate),before=snapshot();for(const [id,m] of assets)assetCache.set(id,m);state=candidate;selection=null;record(before);refresh();notify('Projet importé. Annuler permet de revenir à la version précédente.');}catch(e){notify('Import refusé : '+e.message);}finally{busy=false;}}
+async function importJson(file){if(!file)return;if(file.size>150*1024*1024){notify('Projet trop volumineux (150 Mo maximum).');return;}busy=true;try{const raw=JSON.parse(await file.text());if(raw.zones&&!raw.walls)raw.walls=clone(DEFAULT_STATE.walls);if(!raw.furniture)raw.furniture=[];const candidate=validate(raw);for(const id of Object.keys(candidate.assets)){if(state.assets[id]&&(state.assets[id].data!==candidate.assets[id].data||state.assets[id].builtin!==candidate.assets[id].builtin)){const next=id+'_'+Date.now();candidate.assets[next]=candidate.assets[id];delete candidate.assets[id];candidate.furniture.forEach(f=>{if(f.assetId===id)f.assetId=next;});}}const assets=await loadAssets(candidate),before=snapshot();await backupBeforeReplace('l’import de « '+file.name+' »');for(const [id,m] of assets)assetCache.set(id,m);state=candidate;selection=null;record(before);refresh();notify('Projet importé. Votre travail précédent est dans la copie de secours (Fichiers & exports).');}catch(e){notify('Import refusé : '+e.message);}finally{busy=false;}}
 async function importGlb(file){if(!file)return;if(!/\.glb$/i.test(file.name)||file.size>12*1024*1024){notify('Choisissez un GLB de moins de 12 Mo.');return;}busy=true;try{const data=await new Promise((res,rej)=>{const reader=new FileReader();reader.onload=()=>res(reader.result);reader.onerror=rej;reader.readAsDataURL(file);});const asset={name:file.name.replace(/\.glb$/i,''),data:'data:application/octet-stream;base64,'+data.split(',')[1]},result=await parseAsset(asset),id='asset_'+Date.now()+'_'+Math.random().toString(36).slice(2,7);busy=false;assetCache.set(id,result.model);beginPlacement({type:'custom',assetId:id,n:asset.name,r:0,y:0,w:Math.min(30,result.size.x),h:Math.min(15,result.size.y),d:Math.min(30,result.size.z)},{key:id,value:asset});notify('Modèle importé aux dimensions du fichier. Déplacez le curseur puis cliquez pour le poser.');}catch(e){notify('Import GLB refusé : '+e.message);}finally{busy=false;}}
 async function exportGlb(){if(busy)return;busy=true;const prevCut=cut,prevSelection=selection,prevZoning=$('showZoning').checked;try{
  cut=false;selection=null;$('showZoning').checked=false;rebuild();
@@ -374,7 +415,7 @@ $('view3d').onclick=()=>setView('3d');$('viewPlan').onclick=()=>setView('plan');
 $('cut').onclick=()=>{cut=!cut;if(cut)roofOn=false;rebuild();};$('roof').onclick=()=>{roofOn=!roofOn;rebuild();};
 for(const id of['showLabels','showGrid','showDimensions','showZoning'])$(id).onchange=rebuild;
 $('lighting').onchange=lighting;$('demo').onclick=demo;$('demoShortcut').onclick=demo;$('createRoomHere').onclick=()=>createRoomAt(lastFloorPoint);
-$('reset').onclick=()=>{if(!confirm('Revenir à l’étude initiale ? Le mobilier et les modifications de la maquette seront remplacés. Annuler (Ctrl+Z) permettra de les récupérer tant que la page reste ouverte.'))return;commit(()=>{state=validate(DEFAULT_STATE);selection=null;notify('Étude initiale restaurée. Annuler permet de récupérer votre travail.');});};
+$('reset').onclick=async()=>{if(busy||!confirm('Revenir à l’étude initiale ? Votre maquette actuelle sera mise dans la copie de secours, récupérable depuis « Fichiers & exports ».'))return;try{await backupBeforeReplace('le retour à l’étude initiale');}catch(e){notify(e.message);return;}commit(()=>{state=validate(DEFAULT_STATE);selection=null;notify('Étude initiale restaurée. Votre travail précédent est dans la copie de secours (Fichiers & exports).');});};
 $('exportJson').onclick=exportJson;$('exportGlb').onclick=exportGlb;$('exportPng').onclick=exportPng;
 $('importJson').onclick=()=>$('jsonFile').click();$('importGlb').onclick=()=>$('glbFile').click();
 $('jsonFile').onchange=e=>{importJson(e.target.files[0]);e.target.value='';};$('glbFile').onchange=e=>{importGlb(e.target.files[0]);e.target.value='';};

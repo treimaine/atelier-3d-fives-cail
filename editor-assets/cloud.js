@@ -143,23 +143,15 @@ const AtelierCloud = (() => {
    const blob=fail(await client.storage.from('atelier-versions').download(row.object_path));
    if(blob.size>MAX_BYTES)throw Error('Version trop volumineuse.');
    const candidate=validate(JSON.parse(await blob.text())),loaded=await loadAssets(candidate),before=snapshot();
-   const backup=await dbPut('avant-ouverture:'+user.id,before);
-   if(!backup)throw Error('Impossible de conserver votre copie de secours. Exportez votre projet et libérez du stockage avant de réessayer.');
+   await backupBeforeReplace('l’ouverture de « '+row.title+' »');
    for(const [key,model] of loaded)assetCache.set(key,model);
    state=candidate;selection=null;parentId=id;record(before);persistProject();refresh();
    message('Copie de « '+row.title+' » ouverte. Vos prochaines modifications restent locales jusqu’au partage.');
   }finally{busy=false;}
  }
  async function restoreBackup(){
-  const raw=await dbGet('avant-ouverture:'+user.id);
-  if(!raw)throw Error('Aucune copie de secours sur cet appareil.');
-  busy=true;
-  try{
-   const candidate=validate(JSON.parse(raw)),loaded=await loadAssets(candidate),before=snapshot();
-   for(const [key,model] of loaded)assetCache.set(key,model);
-   state=candidate;selection=null;parentId=null;record(before);persistProject();refresh();
-   message('Copie de secours chargée.');
-  }finally{busy=false;}
+  await restoreProjectBackup();parentId=null;
+  message('Copie de secours récupérée. Le travail affiché avant est à son tour dans la copie de secours.');
  }
  async function setReference(id){
   if(!await ask('Faire de cette version la référence de l’équipe ? Les brouillons de chacun seront conservés.')){message('Changement de référence annulé.');return;}
@@ -167,7 +159,7 @@ const AtelierCloud = (() => {
   await list();message('Version de référence mise à jour.');
  }
  function setup(){
-  (el('panel-team')||el('inspector')).insertAdjacentHTML('afterbegin',`<div id="cloudPanel"><div class="cloud-identity"><span class="cloud-avatar" id="cloudAvatar" aria-hidden="true"></span><span id="cloudIdentity"></span><button id="cloudLogout" class="cloud-link">Se déconnecter</button></div><p id="cloudMessage" role="status" aria-live="polite"></p><div id="cloudContent"><div id="cloudRequests"></div><section class="cloud-card"><h3>Partager mon travail</h3><p class="note">Crée une nouvelle version visible par toute l’équipe, sans écraser celles des autres.</p><label class="cloud-label">Nom de la version<input id="cloudTitle" maxlength="100" placeholder="Ex. Déplacement du bar"></label><label class="cloud-label">Commentaire (facultatif)<textarea id="cloudComment" maxlength="2000" rows="2" placeholder="Ce qui change, ce qu’il faut regarder…"></textarea></label><button id="cloudSave" class="primary">⇪ Partager cette version</button></section><div class="cloud-section-title"><span>VERSIONS DE L’ÉQUIPE</span><button id="cloudReload" title="Récupérer les dernières versions et demandes">↻ Actualiser</button></div><button id="cloudReference" class="cloud-wide">◎ Ouvrir la version de référence</button><div id="cloudVersions"></div><div class="cloud-pagination" id="cloudPagination"><button id="cloudPrevious">‹ Plus récentes</button><span id="cloudPage"></span><button id="cloudNext">Plus anciennes ›</button></div><button id="cloudBackup" class="cloud-link" title="Revenir au travail mis de côté lors de la dernière ouverture d’une version">↺ Retrouver mon travail d’avant la dernière ouverture</button></div></div>`);
+  (el('panel-team')||el('inspector')).insertAdjacentHTML('afterbegin',`<div id="cloudPanel"><div class="cloud-identity"><span class="cloud-avatar" id="cloudAvatar" aria-hidden="true"></span><span id="cloudIdentity"></span><button id="cloudLogout" class="cloud-link">Se déconnecter</button></div><p id="cloudMessage" role="status" aria-live="polite"></p><div id="cloudContent"><div id="cloudRequests"></div><section class="cloud-card"><h3>Partager mon travail</h3><p class="note">Crée une nouvelle version visible par toute l’équipe, sans écraser celles des autres.</p><label class="cloud-label">Nom de la version<input id="cloudTitle" maxlength="100" placeholder="Ex. Déplacement du bar"></label><label class="cloud-label">Commentaire (facultatif)<textarea id="cloudComment" maxlength="2000" rows="2" placeholder="Ce qui change, ce qu’il faut regarder…"></textarea></label><button id="cloudSave" class="primary">⇪ Partager cette version</button></section><div class="cloud-section-title"><span>VERSIONS DE L’ÉQUIPE</span><button id="cloudReload" title="Récupérer les dernières versions et demandes">↻ Actualiser</button></div><button id="cloudReference" class="cloud-wide">◎ Ouvrir la version de référence</button><div id="cloudVersions"></div><div class="cloud-pagination" id="cloudPagination"><button id="cloudPrevious">‹ Plus récentes</button><span id="cloudPage"></span><button id="cloudNext">Plus anciennes ›</button></div><button id="cloudBackup" class="cloud-link" title="Revenir au travail mis de côté avant la dernière ouverture, import ou remise à zéro">↺ Récupérer la copie de secours</button></div></div>`);
   el('cloudSave').onclick=()=>action(saveVersion);
   el('cloudReload').onclick=()=>action(async()=>{await list();message('Liste à jour.');});
   el('cloudReference').onclick=()=>action(async()=>{reference=fail(await client.from('atelier_reference').select('*').eq('id',1).single());if(reference.version_id)await openVersion(reference.version_id);});

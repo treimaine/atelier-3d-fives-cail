@@ -63,15 +63,43 @@ async function reloadSharedProject(){
  if(!raw){notify('Aucun projet partagé publié à côté de l’application.');return;}
  busy=true;
  try{const candidate=validate(JSON.parse(raw)),assets=await loadAssets(candidate),before=snapshot();
+  await backupBeforeReplace('le rechargement du projet du dépôt');
   for(const [id,m] of assets)assetCache.set(id,m);
   state=candidate;selection=null;record(before);refresh();
   notify('Projet partagé du dépôt chargé en révision '+(state.meta.revision||0)+'. Annuler revient à votre version.');}
- catch(e){notify('Projet partagé illisible : '+e.message);}finally{busy=false;}}
+ catch(e){notify(/copie de secours/.test(e.message)?e.message:'Projet partagé illisible : '+e.message);}finally{busy=false;}}
 async function exportSharedProject(){
  const project=clone(state);
  for(const asset of Object.values(project.assets))if(asset.builtin)asset.data=await assetData(asset);
  download(new Blob([JSON.stringify(project,null,2)],{type:'application/json'}),SHARED_PROJECT);
  notify('projet.json prêt. Déposez-le à la racine du dépôt pour le partager avec vos associés.');}
+
+// --- Copie de secours avant remplacement ----------------------------------------
+// L'historique d'annulation disparaît avec la page. Avant qu'une action remplace la maquette
+// (étude initiale, import, variante, version partagée), l'état courant est copié dans un
+// emplacement unique par compte et par appareil. Récupérer la copie échange les deux états.
+const BACKUP_KEY='avant-remplacement',LEGACY_BACKUP_KEY='avant-ouverture';
+async function backupBeforeReplace(reason){
+ const entry={reason:String(reason||'remplacement').slice(0,160),date:new Date().toISOString(),project:snapshot()};
+ if(!await dbPut(projectLocalKey(BACKUP_KEY),JSON.stringify(entry)))throw Error('Impossible de conserver une copie de secours de votre travail. Exportez le projet en .json avant de continuer.');
+ backupStatus(entry);}
+async function readProjectBackup(){
+ for(const key of [BACKUP_KEY,LEGACY_BACKUP_KEY]){const raw=await dbGet(projectLocalKey(key));if(!raw)continue;
+  try{const entry=JSON.parse(raw);if(entry&&typeof entry.project==='string')return entry;if(entry&&entry.walls)return {reason:'ouverture d’une version',date:null,project:raw};}catch{}}
+ return null;}
+async function restoreProjectBackup(){
+ const entry=await readProjectBackup();
+ if(!entry)throw Error('Aucune copie de secours sur cet appareil.');
+ busy=true;
+ try{const candidate=validate(JSON.parse(entry.project)),loaded=await loadAssets(candidate),before=snapshot();
+  await backupBeforeReplace('la récupération de la copie de secours');
+  for(const [id,m] of loaded)assetCache.set(id,m);
+  state=candidate;selection=null;record(before);persistProject();refresh();
+  notify('Copie de secours récupérée (avant '+entry.reason+'). Le travail que vous aviez à l’écran est à son tour dans la copie de secours.');}
+ finally{busy=false;}}
+function backupStatus(entry){if(!$('backupStatus'))return;
+ $('backupStatus').textContent=entry?'Copie de secours : avant '+entry.reason+(entry.date?' · '+new Date(entry.date).toLocaleString('fr-FR',{dateStyle:'short',timeStyle:'short'}):''):'Aucune copie de secours sur cet appareil.';
+ if($('restoreBackup'))$('restoreBackup').disabled=!entry;}
 
 // --- Variantes d'implantation -------------------------------------------------
 // Une variante fige le mobilier et son zonage, pas le bâti : on compare des aménagements
@@ -85,9 +113,10 @@ function variantMetrics(v){const scene={...state,furniture:v.furniture,zones:v.z
   hard:report.hard.length,doors:report.doors.length,clear:report.clear.length,
   area:v.furniture.reduce((n,f)=>n+f.w*f.d,0)};}
 function saveLayoutVariant(name){commit(()=>{state.variants=[...(state.variants||[]),variantSnapshot(name)].slice(-MAX_VARIANTS);});}
-function applyLayoutVariant(id){const v=(state.variants||[]).find(x=>x.id===id);if(!v)return;
+async function applyLayoutVariant(id){const v=(state.variants||[]).find(x=>x.id===id);if(!v||busy)return;
+ try{await backupBeforeReplace('la variante « '+v.n+' »');}catch(e){notify(e.message);return;}
  commit(()=>{state.furniture=clone(v.furniture);state.zones=clone(v.zones);selection=null;});
- notify('Variante « '+v.n+' » appliquée. Annuler revient à l’implantation précédente.');}
+ notify('Variante « '+v.n+' » appliquée. L’implantation précédente est dans la copie de secours.');}
 function deleteLayoutVariant(id){commit(()=>{state.variants=(state.variants||[]).filter(v=>v.id!==id);});}
 function compareVariants(){const list=state.variants||[];
  const current={n:'Implantation courante',date:'',furniture:state.furniture,zones:state.zones};
@@ -138,14 +167,24 @@ function projectRefresh(){
  $('viewList').querySelectorAll('[data-view-del]').forEach(b=>b.onclick=()=>deleteView(b.dataset.viewDel));
  if($('variantCompare').open)$('compareTable').innerHTML=compareVariants();}
 
+// Saisie d'un nom dans le panneau, à la place de prompt() : pas de fenêtre du navigateur,
+// Entrée valide, Échap annule, et le nom proposé est présélectionné.
+function nameForm(key,label){return `<form class="name-form" id="${key}Form" hidden><label class="field">${label}<input id="${key}Name" maxlength="80" required></label><div class="name-form-actions"><button type="submit" class="primary">Enregistrer</button><button type="button" id="${key}Cancel">Annuler</button></div></form>`;}
+function bindNameForm(key,trigger,suggest,save){const form=$(key+'Form'),input=$(key+'Name');
+ const close=()=>{form.hidden=true;$(trigger).disabled=false;};
+ $(trigger).onclick=()=>{if($('variantCompare'))$('variantCompare').open=true;form.hidden=false;$(trigger).disabled=true;input.value=suggest();input.focus();input.select();};
+ form.onsubmit=e=>{e.preventDefault();const name=input.value.trim();close();save(name);};
+ $(key+'Cancel').onclick=close;
+ input.onkeydown=e=>{if(e.key==='Escape'){e.preventDefault();e.stopPropagation();close();}};}
 function projectSetup(){
  $('panel-selection').insertAdjacentHTML('beforeend','<details id="variantCompare"><summary>Variantes &amp; vues</summary>'
-  +'<div class="section-title">VARIANTES D’IMPLANTATION <button id="saveVariant">＋ Figer</button></div><div id="variantList"></div>'
+  +'<div class="section-title">VARIANTES D’IMPLANTATION <button id="saveVariant">＋ Figer</button></div>'+nameForm('variant','Nom de la variante')+'<div id="variantList"></div>'
   +'<div id="compareTable"></div>'
-  +'<div class="section-title">VUES MÉMORISÉES <button id="saveView">＋ Cadrage</button></div><div id="viewList"></div>'
+  +'<div class="section-title">VUES MÉMORISÉES <button id="saveView">＋ Cadrage</button></div>'+nameForm('view','Nom de la vue')+'<div id="viewList"></div>'
   +'<p class="note">Une variante fige le mobilier et le zonage courants ; une vue mémorise le cadrage. Les deux sont enregistrés dans le projet et suivent l’export JSON.</p></details>');
- $('saveVariant').onclick=()=>{const name=prompt('Nom de la variante','Implantation '+((state.variants||[]).length+1));if(name!==null)saveLayoutVariant(name.trim()||'Variante');};
- $('saveView').onclick=()=>{const name=prompt('Nom de la vue','Vue '+((state.views||[]).length+1));if(name!==null)saveNamedView(name.trim()||'Vue');};
+ bindNameForm('variant','saveVariant',()=>'Implantation '+((state.variants||[]).length+1),name=>saveLayoutVariant(name||'Variante'));
+ bindNameForm('view','saveView',()=>'Vue '+((state.views||[]).length+1),name=>saveNamedView(name||'Vue'));
+ if($('restoreBackup')){$('restoreBackup').onclick=()=>{if(busy)return;restoreProjectBackup().catch(e=>{busy=false;notify(e.message);});};readProjectBackup().then(backupStatus).catch(()=>backupStatus(null));}
  $('variantCompare').addEventListener('toggle',()=>{if($('variantCompare').open)$('compareTable').innerHTML=compareVariants();});
  if(typeof AtelierCloud==='undefined'){$('panel-selection').insertAdjacentHTML('beforeend','<details><summary>Projet partagé</summary>'
   +'<button id="publishShared">Préparer projet.json pour le dépôt</button>'

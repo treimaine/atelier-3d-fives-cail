@@ -40,7 +40,10 @@ async function fixture(options={}){
   state:{meta:{name:'Projet'},walls:[],zones:[],furniture:[],assets:{custom:{data:'base64-preserved'}},reference:{data:'image-preserved'}},
   busy:false,selection:null,assetCache:new Map(),
   snapshot(){return JSON.stringify(context.state);},validate:p=>p,loadAssets:async()=>new Map(),
-  dbPut:async(key,value)=>{if(!backupAllowed)return null;drafts.set(key,value);return true;},dbGet:async key=>drafts.get(key),
+  dbPut:async(key,value)=>{drafts.set(key,value);return true;},dbGet:async key=>drafts.get(key),
+  // Stand-ins for project.js: the real backup slot is tested in test-editor.cjs.
+  backupBeforeReplace:async reason=>{if(!backupAllowed)throw Error('Impossible de conserver une copie de secours de votre travail.');drafts.set('backup',JSON.stringify({reason,project:context.snapshot()}));},
+  restoreProjectBackup:async()=>{const entry=drafts.get('backup');if(!entry)throw Error('Aucune copie de secours sur cet appareil.');context.state=JSON.parse(JSON.parse(entry).project);},
   record(){},persistProject(){},refresh(){},init:async()=>{initializations++;},
   importJson:async blob=>{context.state=JSON.parse(await blob.text());},location:{reload(){}},
   esc:s=>String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))});
@@ -107,13 +110,13 @@ test('Only administrators see reference promotion controls',async()=>{
  const f=await fixture({role:'member'});await f.save();assert.ok(!f.element('cloudVersions').innerHTML.includes('data-cloud-reference'));
 });
 test('Opening a reference creates a backup before replacing the local draft',async()=>{
- const f=await fixture();await f.save();f.reference.version_id=f.versions[0].id;f.context.state.meta.name='Brouillon à garder';await f.click('cloudReference');assert.equal(f.context.state.meta.name,'Projet');assert.equal(JSON.parse([...f.drafts.values()][0]).meta.name,'Brouillon à garder');await f.click('cloudBackup');assert.equal(f.context.state.meta.name,'Brouillon à garder');
+ const f=await fixture();await f.save();f.reference.version_id=f.versions[0].id;f.context.state.meta.name='Brouillon à garder';await f.click('cloudReference');assert.equal(f.context.state.meta.name,'Projet');const entry=JSON.parse(f.drafts.get('backup'));assert.equal(JSON.parse(entry.project).meta.name,'Brouillon à garder');assert.match(entry.reason,/ouverture/);await f.click('cloudBackup');assert.equal(f.context.state.meta.name,'Brouillon à garder');
 });
 test('A failed local backup prevents replacing the current project',async()=>{
  const f=await fixture();await f.save();f.reference.version_id=f.versions[0].id;f.context.state.meta.name='Ne pas perdre';f.refuseBackup();await f.click('cloudReference');assert.equal(f.context.state.meta.name,'Ne pas perdre');assert.match(f.element('cloudMessage').textContent,/copie de secours/);assert.equal(f.context.busy,false);
 });
 test('Cancelling an opening preserves the current draft',async()=>{
- const f=await fixture({cancel:true});await f.save();f.reference.version_id=f.versions[0].id;f.context.state.meta.name='Courant';await f.click('cloudReference');assert.equal(f.context.state.meta.name,'Courant');assert.equal(f.drafts.size,0);
+ const f=await fixture({cancel:true});await f.save();f.reference.version_id=f.versions[0].id;f.context.state.meta.name='Courant';await f.click('cloudReference');assert.equal(f.context.state.meta.name,'Courant');assert.equal(f.drafts.has('backup'),false);
 });
 test('An empty title never uploads a file',async()=>{
  const f=await fixture();await f.save('  ');assert.equal(f.uploads(),0);assert.match(f.element('cloudMessage').textContent,/nom/);
