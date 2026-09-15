@@ -46,7 +46,7 @@ Les modules partagent une portée globale et se chargent dans l'ordre déclaré 
 
 Chaque membre se connecte avec son compte. Son brouillon est sauvegardé sur son appareil ; le bouton **Enregistrer une version partagée** crée une proposition datée et consultable par l’équipe, sans écraser les autres versions. L’administrateur choisit la version de référence.
 
-Le module `editor-assets/cloud.js` gère la connexion, les versions et la référence. `editor-assets/cloud-config.js` contient uniquement l’URL du projet Supabase et sa clé publique. Les permissions sont appliquées dans Supabase ; les comptes non membres ne peuvent pas lire ni écrire les données.
+Le module `editor-assets/cloud.js` gère la connexion, l’inscription, les demandes d’accès, les versions et la référence. `editor-assets/workspace.js` gère l’interface autour de la maquette : onglets Sélection / Équipe, bouton de partage, aide et écran de bienvenue. `editor-assets/cloud-config.js` contient uniquement l’URL du projet Supabase et sa clé publique. Les permissions sont appliquées dans Supabase ; les comptes non membres ne peuvent pas lire ni écrire les données.
 
 Les plans et modèles importés sont inclus dans les versions privées (49 Mo maximum par version). Le fichier `projet.json` reste l’étude initiale livrée avec le dépôt, utilisée uniquement lorsqu’aucune référence distante ni copie locale n’existe.
 

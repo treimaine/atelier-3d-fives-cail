@@ -249,12 +249,18 @@ test('The proposal flags its bespoke items without changing their dimensions',()
  assert.equal(run('state.furniture.find(f=>f.type==="chair").w'),.45);
  assert.equal(run('Arch.collisions(state).hard.length'),0);
 });
-test('A blocked building drag reports the protection instead of moving the camera',()=>{
- run('state=validate(clone(DEFAULT_STATE));lockBuilding=true;selection={kind:"columns",i:0};var blockedHit={kind:"columns",i:0};var blocked=lockBuilding&&blockedHit&&blockedHit.kind!=="furniture"?blockedHit:null');
- assert.notEqual(run('blocked'),null);
- run('lockBuilding=false;blocked=lockBuilding&&blockedHit&&blockedHit.kind!=="furniture"?blockedHit:null');
- assert.equal(run('blocked'),null);
- run('lockBuilding=true');
+test('A column embedded in a wall wins the click over the wall face in front of it',()=>{
+ const pickOf=(hits,current='null')=>run(`JSON.stringify(choosePick(${JSON.stringify(hits)},${current}))`);
+ const wall={data:{kind:'walls',i:2},dist:10},column={data:{kind:'columns',i:4},dist:10.2},floor={data:{kind:'zones',i:0},dist:12};
+ assert.equal(pickOf([wall,column,floor]),JSON.stringify(column.data));
+ assert.equal(pickOf([{data:{kind:'open',wi:2,oi:0},dist:10},column]),JSON.stringify(column.data));
+ // Even with the wall selected, the column behind its face stays reachable.
+ assert.equal(pickOf([wall,column],'{kind:"walls",i:2}'),JSON.stringify(column.data));
+ // A column far behind the wall (another room) does not steal the click.
+ assert.equal(pickOf([wall,{data:column.data,dist:14}]),JSON.stringify(wall.data));
+ // A handle still has the last word, and an empty ray picks nothing.
+ assert.equal(pickOf([wall,column,{data:{kind:'end',i:2,end:1},dist:11}]),JSON.stringify({kind:'end',i:2,end:1}));
+ assert.equal(pickOf([]),'null');
 });
 test('Column nudging keeps the chosen step between clicks',()=>{
  run('state=validate(clone(DEFAULT_STATE));selection={kind:"columns",i:0};columnStep=.5;var startX=state.building.columns[0].x');
@@ -387,13 +393,25 @@ test('A quarter turn rotates the space and what it carries',()=>{
  assert.ok(run('Arch.contains(Arch.polygon(state.zones[0]),{x:state.furniture[0].x,z:state.furniture[0].z})'),'le meuble est sorti de la piece');
  run('historyStep()');assert.equal(run('state.zones[0].w'),4);
 });
-test('Spaces stay draggable while walls and columns keep their protection',()=>{
- run('lockBuilding=true');
- const blockedFor=k=>run(`(()=>{const hit={kind:"${k}",i:0};return !!(lockBuilding&&hit&&!["furniture","zones","room"].includes(hit.kind));})()`);
- assert.equal(blockedFor('zones'),false);
- assert.equal(blockedFor('room'),false);
- assert.equal(blockedFor('walls'),true);
- assert.equal(blockedFor('columns'),true);
+test('Editing a wall or a room never drags its linked neighbours along',()=>{
+ const square='state=validate({zones:[{n:"Room",vertices:[{x:0,z:0},{x:4,z:0},{x:4,z:3},{x:0,z:3}],nodes:["a","b","c","d"]}],furniture:[],walls:[{...DW(0,0,4,0),n1:"a",n2:"b",axis:"x"},{...DW(4,0,4,3),n1:"b",n2:"c",axis:"z"},{...DW(4,3,0,3),n1:"c",n2:"d",axis:"x"},{...DW(0,3,0,0),n1:"d",n2:"a",axis:"z"}]});selection=null;var linked=JSON.stringify(state)';
+ const others=()=>run('JSON.stringify([state.walls[1],state.walls[2],state.walls[3]].map(w=>[w.x1,w.z1,w.x2,w.z2]))');
+ run(square);const start=others();
+ // Whole wall moved (as a mouse drag does): only that wall changes, the room keeps its outline.
+ run('commit(()=>{const w=state.walls[0];w.z1+=1;w.z2+=1;})');
+ assert.equal(others(),start);assert.equal(run('state.walls[0].z1'),1);assert.equal(run('Arch.area(state.zones[0].vertices)'),12);
+ // One end moved off its axis: the wall becomes free instead of refusing, neighbours stay.
+ run(square);run('commit(()=>{state.walls[0].z2=.5;})');
+ assert.equal(others(),start);assert.equal(run('state.walls[0].axis'),'free');
+ // The room moved: its walls stay put and the room is unlinked.
+ run(square);run('commit(()=>roomTranslate(state.zones[0],2,0,null,clone(state)))');
+ assert.equal(others(),start);assert.equal(run('state.walls[0].x1'),0);assert.equal(run('state.zones[0].nodes'),undefined);
+ // An edit that does not move anything keeps the links.
+ run(square);run('commit(()=>{state.walls[0].h=3})');assert.equal(run('state.walls[0].n1+state.zones[0].nodes.join("")'),'aabcd');
+});
+test('Walls and columns are no longer behind a drag protection',()=>{
+ assert.equal(run('typeof lockBuilding'),'undefined');
+ assert.equal(run('typeof dragBlocked'),'undefined');
 });
 test('Every space exposes handles and numeric fields',()=>{
  run('state=validate(clone(DEFAULT_STATE))');

@@ -79,15 +79,22 @@ const AtelierCloud = (() => {
   render();
  }
  function render(){
-  el('cloudRequests').innerHTML=requests.length?'<p class="cloud-subtitle">Demandes d’accès ('+requests.length+')</p>'+requests.map(row=>`<article class="cloud-request"><strong>${esc(row.display_name)}</strong><small>${esc(row.email)} · ${esc(new Date(row.created_at).toLocaleString('fr-FR'))}</small><button data-cloud-approve="${esc(row.user_id)}" class="primary">Accepter</button><button data-cloud-reject="${esc(row.user_id)}">Refuser</button></article>`).join(''):'';
+  el('cloudRequests').innerHTML=requests.length?'<p class="cloud-subtitle">⚑ Demandes d’accès en attente ('+requests.length+')</p><p class="note">Vérifiez que l’adresse appartient bien à un associé avant d’accepter.</p>'+requests.map(row=>`<article class="cloud-request"><strong>${esc(row.display_name)}</strong><small>${esc(row.email)} · ${esc(new Date(row.created_at).toLocaleString('fr-FR'))}</small><button data-cloud-approve="${esc(row.user_id)}" class="primary">Accepter</button><button data-cloud-reject="${esc(row.user_id)}">Refuser</button></article>`).join(''):'';
   el('cloudRequests').querySelectorAll('[data-cloud-approve]').forEach(button=>button.onclick=()=>action(()=>reviewRequest(button.dataset.cloudApprove,true)));
   el('cloudRequests').querySelectorAll('[data-cloud-reject]').forEach(button=>button.onclick=()=>action(()=>reviewRequest(button.dataset.cloudReject,false)));
-  el('cloudIdentity').textContent=member.display_name+' · '+(member.role==='admin'?'administrateur':'associé');
+  el('cloudIdentity').innerHTML=`<strong>${esc(member.display_name)}</strong><small>${member.role==='admin'?'Administrateur':'Associé'}</small>`;
+  el('cloudAvatar').textContent=String(member.display_name||'?').trim().charAt(0).toUpperCase();
   el('cloudPage').textContent='Page '+(page+1);
   el('cloudPrevious').disabled=page===0;
   el('cloudNext').disabled=rows.length<=PAGE_SIZE;
+  el('cloudPagination').hidden=page===0&&rows.length<=PAGE_SIZE;
   el('cloudReference').disabled=!reference?.version_id;
-  el('cloudVersions').innerHTML=rows.slice(0,PAGE_SIZE).map(row=>`<article class="cloud-version"><strong>${esc(row.title)}</strong>${reference?.version_id===row.id?'<span class="cloud-badge">Référence</span>':''}<small>${esc(row.author_name)} · ${esc(new Date(row.created_at).toLocaleString('fr-FR'))}</small><p>${esc(row.comment)}</p><button data-cloud-open="${row.id}">Ouvrir une copie</button>${member.role==='admin'?`<button data-cloud-reference="${row.id}" ${reference?.version_id===row.id?'disabled':''}>Définir comme référence</button>`:''}</article>`).join('')||'<p class="note">Aucune version partagée. Enregistrez votre première proposition.</p>';
+  el('cloudReference').title=reference?.version_id?'Version choisie par l’administrateur comme base commune':'Aucune version de référence choisie pour l’instant';
+  if(typeof Workspace!=='undefined')Workspace.setBadge(requests.length);
+  el('cloudVersions').innerHTML=rows.slice(0,PAGE_SIZE).map(row=>{
+   const isReference=reference?.version_id===row.id,mine=row.author_id===user.id;
+   return `<article class="cloud-version${isReference?' is-reference':''}"><div class="cloud-version-head"><strong>${esc(row.title)}</strong>${isReference?'<span class="cloud-badge">Référence</span>':''}</div><small>${esc(row.author_name)}${mine?' (vous)':''} · ${esc(new Date(row.created_at).toLocaleString('fr-FR',{dateStyle:'short',timeStyle:'short'}))}</small>${row.comment?`<p>${esc(row.comment)}</p>`:''}<div class="cloud-version-actions"><button data-cloud-open="${row.id}" title="Charger une copie de cette version dans votre maquette">Ouvrir</button>${member.role==='admin'&&!isReference?`<button data-cloud-reference="${row.id}" title="Faire de cette version la base commune de l’équipe">Définir comme référence</button>`:''}</div></article>`;
+  }).join('')||'<p class="note cloud-empty">Aucune version partagée pour l’instant. Partagez la première proposition avec le formulaire ci-dessus.</p>';
   el('cloudVersions').querySelectorAll('[data-cloud-open]').forEach(button=>button.onclick=()=>action(()=>openVersion(button.dataset.cloudOpen)));
   el('cloudVersions').querySelectorAll('[data-cloud-reference]').forEach(button=>button.onclick=()=>action(()=>setReference(button.dataset.cloudReference)));
  }
@@ -160,7 +167,7 @@ const AtelierCloud = (() => {
   await list();message('Version de référence mise à jour.');
  }
  function setup(){
-  el('inspector').insertAdjacentHTML('afterbegin',`<details id="cloudPanel" open><summary>Espace partagé</summary><p id="cloudIdentity" class="note"></p><p id="cloudMessage" role="status" aria-live="polite">Vos modifications sont sauvegardées sur cet appareil. Enregistrez une version pour les partager.</p><div id="cloudContent"><div id="cloudRequests"></div><label class="cloud-label">Nom de la version<input id="cloudTitle" maxlength="100" placeholder="Ex. Déplacement du bar"></label><label class="cloud-label">Commentaire facultatif<textarea id="cloudComment" maxlength="2000" rows="2"></textarea></label><button id="cloudSave" class="primary">Enregistrer une version partagée</button><button id="cloudReference">Ouvrir la référence de l’équipe</button><button id="cloudReload">Actualiser les versions</button><div id="cloudVersions"></div><div class="cloud-pagination"><button id="cloudPrevious">Précédent</button><span id="cloudPage"></span><button id="cloudNext">Suivant</button></div><button id="cloudBackup">Récupérer la copie avant ouverture</button><button id="cloudLogout">Se déconnecter</button></div></details>`);
+  (el('panel-team')||el('inspector')).insertAdjacentHTML('afterbegin',`<div id="cloudPanel"><div class="cloud-identity"><span class="cloud-avatar" id="cloudAvatar" aria-hidden="true"></span><span id="cloudIdentity"></span><button id="cloudLogout" class="cloud-link">Se déconnecter</button></div><p id="cloudMessage" role="status" aria-live="polite"></p><div id="cloudContent"><div id="cloudRequests"></div><section class="cloud-card"><h3>Partager mon travail</h3><p class="note">Crée une nouvelle version visible par toute l’équipe, sans écraser celles des autres.</p><label class="cloud-label">Nom de la version<input id="cloudTitle" maxlength="100" placeholder="Ex. Déplacement du bar"></label><label class="cloud-label">Commentaire (facultatif)<textarea id="cloudComment" maxlength="2000" rows="2" placeholder="Ce qui change, ce qu’il faut regarder…"></textarea></label><button id="cloudSave" class="primary">⇪ Partager cette version</button></section><div class="cloud-section-title"><span>VERSIONS DE L’ÉQUIPE</span><button id="cloudReload" title="Récupérer les dernières versions et demandes">↻ Actualiser</button></div><button id="cloudReference" class="cloud-wide">◎ Ouvrir la version de référence</button><div id="cloudVersions"></div><div class="cloud-pagination" id="cloudPagination"><button id="cloudPrevious">‹ Plus récentes</button><span id="cloudPage"></span><button id="cloudNext">Plus anciennes ›</button></div><button id="cloudBackup" class="cloud-link" title="Revenir au travail mis de côté lors de la dernière ouverture d’une version">↺ Retrouver mon travail d’avant la dernière ouverture</button></div></div>`);
   el('cloudSave').onclick=()=>action(saveVersion);
   el('cloudReload').onclick=()=>action(async()=>{await list();message('Liste à jour.');});
   el('cloudReference').onclick=()=>action(async()=>{reference=fail(await client.from('atelier_reference').select('*').eq('id',1).single());if(reference.version_id)await openVersion(reference.version_id);});
@@ -172,7 +179,12 @@ const AtelierCloud = (() => {
    if(!ok&&!await ask('La sauvegarde locale a échoué. Se déconnecter malgré tout ?'))return;
    fail(await client.auth.signOut({scope:'local'}));location.reload();
   });
-  action(async()=>{await list();message('Vos modifications restent locales. Enregistrez une version pour les partager.');});
+  action(async()=>{
+   await list();
+   message(requests.length?requests.length+' demande(s) d’accès attendent votre validation ci-dessous.':'Vos modifications restent sur cet appareil tant que vous ne partagez pas de version.');
+   if(requests.length&&typeof Workspace!=='undefined')Workspace.show('team');
+  });
+  if(typeof Workspace!=='undefined')Workspace.welcome('atelier-bienvenue:'+user.id);
  }
  async function enter(session){
   user=session.user;

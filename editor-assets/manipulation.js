@@ -1,6 +1,6 @@
 'use strict';
 let placementDraft=null,placementPoint=null,placementAsset=null,rotationDrag=null;
-let rotationIncrement=15,repeatPlacement=false,allowOverlap=false,lockBuilding=true;
+let rotationIncrement=15,repeatPlacement=false,allowOverlap=false;
 const previewMaterials=[];
 const objectKey=()=>'obj_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,8);
 const groupKey=()=>'group_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,8);
@@ -60,6 +60,4 @@ function manipulationProperties(){if(selection?.kind!=='furniture')return;const 
 }
 function manipulationSetup(){
  $('tab-furniture').insertAdjacentHTML('afterbegin','<details open><summary>Placement &amp; rotation</summary><label class="field">Pas de rotation<select id="rotationIncrement"><option value="0">Libre</option><option value="15" selected>15°</option><option value="45">45°</option><option value="90">90°</option></select></label><label class="check"><input type="checkbox" id="repeatPlacement"> Poser plusieurs exemplaires</label><label class="check"><input type="checkbox" id="allowOverlap"> Placement libre malgré les collisions</label><p id="placementStatus" class="note"></p></details>');
- $('rotationIncrement').onchange=()=>{rotationIncrement=+$('rotationIncrement').value;properties();};$('repeatPlacement').onchange=()=>repeatPlacement=$('repeatPlacement').checked;$('allowOverlap').onchange=()=>allowOverlap=$('allowOverlap').checked;
- $('tab-walls').insertAdjacentHTML('afterbegin','<label class="check"><input type="checkbox" id="lockBuilding" checked> Protéger murs et poteaux du déplacement à la souris</label>');$('lockBuilding').onchange=()=>lockBuilding=$('lockBuilding').checked;
-}
+ $('rotationIncrement').onchange=()=>{rotationIncrement=+$('rotationIncrement').value;properties();};$('repeatPlacement').onchange=()=>repeatPlacement=$('repeatPlacement').checked;$('allowOverlap').onchange=()=>allowOverlap=$('allowOverlap').checked;}

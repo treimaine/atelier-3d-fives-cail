@@ -84,7 +84,7 @@ function roomDragMove(point){if(!roomDragState)return false;
  const z=state.zones[d.i];if(!z){roomDragState=null;return false;}
  if(d.mode==='move')roomTranslate(z,snap(point.x-d.grab.x)-z.x,snap(point.z-d.grab.z)-z.z,d.ids,source);
  else roomResize(z,d.axis,{x:snap(point.x),z:snap(point.z)});
- try{Arch.propagate(JSON.parse(d.before),state);state=validate(state);d.error=null;}
+ try{isolateEdit(JSON.parse(d.before),state);Arch.propagate(JSON.parse(d.before),state);state=validate(state);d.error=null;}
  catch(e){d.error=e.message;state=JSON.parse(d.before);}
  requestBuild();return true;}
 function roomDragEnd(cancel=false){if(!roomDragState)return;const d=roomDragState;roomDragState=null;
@@ -109,7 +109,7 @@ function roomProperties(){if(selection?.kind!=='zones')return;const z=selected()
   +'<button id="roomRotateLeft">↶ Quart de tour</button><button id="roomRotateRight">↷ Quart de tour</button>'
   +'<div class="nudge">'+[['−X',-1,0],['+X',1,0],['−Z',0,-1],['+Z',0,1]].map(([n,dx,dz])=>`<button data-room-nudge="${dx} ${dz}">${n}</button>`).join('')
   +`<label class="field">Pas · m<input id="roomStep" type="number" min=".05" max="5" step=".05" value="${roomStep}"></label></div>`
-  +'<p class="note">Un quart de tour pivote aussi le mobilier emporté et délie le contour de ses murs. Les murs suivent l’espace lorsqu’il leur est lié (« Créer / lier le périmètre »).</p>');
+  +'<p class="note">Un quart de tour pivote aussi le mobilier emporté. Déplacer ou remodeler l’espace ne touche jamais ses murs : il s’en détache.</p>');
  $('roomCarry').onchange=()=>{roomCarry=$('roomCarry').checked;};
  $('roomStep').onchange=()=>{roomStep=Math.min(5,Math.max(.05,+$('roomStep').value||.25));$('roomStep').value=roomStep;};
  $('roomRotateLeft').onclick=()=>roomRotate(-1);$('roomRotateRight').onclick=()=>roomRotate(1);

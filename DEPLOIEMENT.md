@@ -29,7 +29,7 @@ Chaque associé crée lui-même son compte :
 1. Lui communiquer l’URL du site.
 2. Sur l’écran de connexion, il clique sur **Créer un compte**, saisit son nom, son adresse e-mail et un mot de passe d’au moins 8 caractères.
 3. Son compte est créé mais **n’a accès à rien** : il voit le message « demande en attente ».
-4. Vous vous connectez : la section **Demandes d’accès** apparaît en haut du panneau **Espace partagé** (bouton **Actualiser les versions** pour la rafraîchir). Cliquez sur **Accepter** ou **Refuser**.
+4. Vous vous connectez : l’onglet **Équipe** (colonne de droite) s’ouvre avec un compteur rouge et la section **Demandes d’accès en attente** en haut (bouton **↻ Actualiser** pour la rafraîchir). Cliquez sur **Accepter** ou **Refuser**.
 5. L’associé clique sur **Vérifier à nouveau** et entre dans l’atelier.
 
 **Vérifiez l’adresse avant d’accepter.** Sans service d’e-mails, Supabase ne peut pas prouver que la personne possède l’adresse saisie : n’importe qui disposant de l’URL peut créer un compte avec un nom et une adresse de son choix. Acceptez uniquement une demande que votre associé vous a confirmée de vive voix ou par message. Une demande refusée n’est pas renvoyée depuis le site.
@@ -62,12 +62,15 @@ Pour retirer l’accès, passer `active` à `false` pour ce membre dans le Table
 
 ## Travailler ensemble
 
+La colonne de droite a deux onglets : **Sélection** (propriétés de l’élément cliqué, ouvert automatiquement à chaque sélection) et **Équipe** (versions partagées et demandes d’accès). Le bouton **? Aide** (ou la touche `?`) ouvre le mode d’emploi et les raccourcis ; un écran de bienvenue s’affiche à la première connexion de chaque compte.
+
 - **Brouillon local** : chaque compte a sa propre sauvegarde dans le navigateur. Les mouvements d’objets ne sont pas partagés automatiquement.
-- **Enregistrer une version partagée** : donner un titre, éventuellement un commentaire, puis enregistrer. Cela crée une nouvelle version datée, attribuée à votre compte.
-- **Actualiser les versions** : récupérer les dernières propositions. Les versions s’affichent par pages de 20.
-- **Ouvrir une copie** : charger une proposition pour la consulter ou la modifier. Le brouillon précédent est sauvegardé dans une copie de secours locale avant remplacement.
-- **Récupérer la copie avant ouverture** : retrouver la dernière copie de secours. Un seul emplacement de secours est conservé par compte et appareil.
-- **Définir comme référence** : action administrateur. Un nouvel appareil part de cette version. Les personnes ayant un brouillon le conservent et peuvent cliquer sur **Ouvrir la référence de l’équipe**.
+- **⇪ Partager une version** (en-tête) : ouvre l’onglet Équipe sur le formulaire. Donner un titre, éventuellement un commentaire, puis **Partager cette version**. Cela crée une nouvelle version datée, attribuée à votre compte.
+- **↻ Actualiser** : récupérer les dernières propositions et demandes. Les versions s’affichent par pages de 20.
+- **Ouvrir** : charger une copie d’une proposition pour la consulter ou la modifier. Le brouillon précédent est mis de côté dans une copie de secours locale avant remplacement.
+- **Retrouver mon travail d’avant la dernière ouverture** : revenir à cette copie de secours. Un seul emplacement de secours est conservé par compte et appareil.
+- **Définir comme référence** : action administrateur. Un nouvel appareil part de cette version. Les personnes ayant un brouillon le conservent et peuvent cliquer sur **Ouvrir la version de référence**.
+- **Exporter le projet .json** : désormais dans la colonne de gauche, section **Fichiers & exports**.
 
 Les versions enregistrées ne sont ni modifiées ni supprimées par l’application. Deux enregistrements simultanés créent deux versions. Un changement concurrent de référence est refusé et demande une actualisation.
 

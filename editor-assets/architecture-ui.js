@@ -14,6 +14,15 @@ const builtinPromises=new Map();
 function loadBuiltin(id){if(!BUNDLED_MODELS[id])return Promise.reject(Error('Modèle inconnu.'));if(BUNDLED_MODELS[id].data)return Promise.resolve(BUNDLED_MODELS[id].data);if(!builtinPromises.has(id))builtinPromises.set(id,new Promise((res,rej)=>{const script=document.createElement('script');script.src='editor-assets/models/'+id+'.js';script.onload=()=>res(BUNDLED_MODELS[id].data);script.onerror=()=>{builtinPromises.delete(id);rej(Error('Modèle local introuvable. Conservez le dossier editor-assets/models.'));};document.head.appendChild(script);}));return builtinPromises.get(id);}
 async function assetData(asset){return asset.builtin?loadBuiltin(asset.builtin):asset.data;}
 function uid(){return 'junction_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,8);}
+// Chaque élément modifié reste indépendant : l'extrémité de mur déplacée quitte sa jonction et
+// l'espace remodelé quitte ses murs, pour qu'Arch.propagate n'entraîne plus les voisins.
+// Une jonction renommée par l'opération elle-même (scission, périmètre créé) est laissée intacte.
+function isolateEdit(before,next){const moved=(a,b)=>Math.abs(a-b)>Arch.EPS;
+ next.walls.forEach((w,i)=>{const old=before.walls[i];if(!old)return;
+  for(const k of[1,2])if(w['n'+k]&&w['n'+k]===old['n'+k]&&(moved(w['x'+k],old['x'+k])||moved(w['z'+k],old['z'+k])))w['n'+k]=uid();
+  if(w.axis==='x'&&moved(w.z1,w.z2)||w.axis==='z'&&moved(w.x1,w.x2))w.axis='free';});
+ next.zones.forEach((z,i)=>{const old=before.zones[i];if(!z.nodes||!old?.nodes||JSON.stringify(z.nodes)!==JSON.stringify(old.nodes))return;
+  if(JSON.stringify(Arch.polygon(z))!==JSON.stringify(Arch.polygon(old)))delete z.nodes;});}
 function nearbyPoint(p){let best={x:snap(p.x),z:snap(p.z)},d=.18;for(const w of state.walls)for(const k of[1,2]){const q={x:w['x'+k],z:w['z'+k]},dist=Arch.distance(p,q);if(dist<d){best=q;d=dist;}}return best;}
 function nodeAt(p){for(const w of state.walls)for(const k of[1,2])if(Arch.distance(p,{x:w['x'+k],z:w['z'+k]})<.0001)return w['n'+k];return Arch.nodeKey(p.x,p.z);}
 function addRoomWalls(z){const p=Arch.polygon(z);z.vertices=clone(p);z.nodes=p.map(nodeAt);p.forEach((a,i)=>{const b=p[(i+1)%p.length],n1=z.nodes[i],n2=z.nodes[(i+1)%p.length];if(state.walls.some(w=>w.n1===n1&&w.n2===n2||w.n2===n1&&w.n1===n2))return;state.walls.push({...DW(a.x,a.z,b.x,b.z,'cloison',.15),n1,n2,axis:Math.abs(a.z-b.z)<.0001?'x':Math.abs(a.x-b.x)<.0001?'z':'free'});});}

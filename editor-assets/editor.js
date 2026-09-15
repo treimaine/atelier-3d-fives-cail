@@ -71,7 +71,7 @@ function notify(message){$('notice').textContent=message;$('notice').style.displ
 function snapshot(){return JSON.stringify(state);}
 function persist(){persistProject();}
 function record(before){if(before===snapshot())return;circulationStale=true;undoStack.push(before);if(undoStack.length>40)undoStack.shift();redoStack.length=0;persist();}
-function commit(fn){if(busy)return;const before=snapshot(),beforeSelection=clone(selection);try{fn();Arch.propagate(JSON.parse(before),state);state=validate(state);record(before);refresh();}catch(e){state=JSON.parse(before);selection=beforeSelection;notify(e.message);refresh();}}
+function commit(fn){if(busy)return;const before=snapshot(),beforeSelection=clone(selection);try{fn();isolateEdit(JSON.parse(before),state);Arch.propagate(JSON.parse(before),state);state=validate(state);record(before);refresh();}catch(e){state=JSON.parse(before);selection=beforeSelection;notify(e.message);refresh();}}
 function historyStep(redo=false){if(busy)return;circulationStale=true;const src=redo?redoStack:undoStack,dst=redo?undoStack:redoStack;if(!src.length)return;dst.push(snapshot());state=JSON.parse(src.pop());selection=null;persist();refresh();}
 // Les poteaux vivent dans state.building : une collection de plus, sélectionnable comme les autres.
 const collection=kind=>kind==='columns'?state.building?.columns:state[kind];
@@ -207,7 +207,7 @@ function requestBuild(){buildPending=true;dirty=true;}
 // Inspector values are committed atomically through the same validator as imports.
 function field(key,title,value,type='number',step='.05'){if(type==='number'&&Number.isFinite(value))value=+value.toFixed(3);return `<label>${title}<input data-field="${key}" type="${type}" value="${esc(value)}" ${type==='number'?`step="${step}"`:''}></label>`;}
 function selectField(key,title,value,choices){return `<label class="wide">${title}<select data-field="${key}">${Object.entries(choices).map(([k,n])=>`<option value="${k}" ${value===k?'selected':''}>${n}</option>`).join('')}</select></label>`;}
-function properties(){const o=selected(),p=$('properties');p.innerHTML='';$('emptySelection').hidden=!!o;$('selectionTitle').textContent=o?(o.n|| (selection.kind==='walls'?'Mur '+(selection.i+1):selection.kind==='columns'?'Poteau '+(selection.i+1):OPEN_TYPES[o.type]?.n)):'Votre espace de travail';if(!o)return;
+function properties(){const o=selected(),p=$('properties');p.innerHTML='';$('emptySelection').hidden=!!o;if(typeof Workspace!=='undefined')Workspace.followSelection(o?selection:null);$('selectionTitle').textContent=o?(o.n|| (selection.kind==='walls'?'Mur '+(selection.i+1):selection.kind==='columns'?'Poteau '+(selection.i+1):OPEN_TYPES[o.type]?.n)):'Votre espace de travail';if(!o)return;
  let html='<div class="fields">';
  if(selection.kind==='zones')html+=field('n','Nom',o.n,'text')+field('c','Couleur du zonage',o.c,'color')+(o.vertices?'':field('x','Position X · m',o.x)+field('z','Position Z · m',o.z)+field('w','Largeur · m',o.w)+field('d','Profondeur · m',o.d))+selectField('surface','Revêtement',o.surface,SURFACES)+`<label class="wide">Notes<textarea data-field="t">${esc(o.t)}</textarea></label>`;
  if(selection.kind==='walls')html+=selectField('mat','Construction',o.mat,{plein:'Béton',cloison:'Cloison claire',vitre:'Façade vitrée'})+field('t','Épaisseur · m',o.t)+field('h','Hauteur · m',o.h)+field('x1','Départ X · m',o.x1)+field('z1','Départ Z · m',o.z1)+field('x2','Arrivée X · m',o.x2)+field('z2','Arrivée Z · m',o.z2);
@@ -275,18 +275,30 @@ const PICK_TOLERANCE=.6;
 // Une poignée est dessinée pour être saisie : elle passe avant le corps de l'objet, sinon le
 // sol d'un espace sélectionné vole les clics destinés à ses propres poignées.
 const HANDLE_KINDS=new Set(['room','end','vertex','rotate']);
-function pick(e){cast(e);let nearest=null,preferred=null;
+// Un poteau noyé dans une cloison est touché juste derrière la face du mur : il passe avant
+// ce mur, sinon il faudrait le chercher dans la liste pour pouvoir le saisir.
+const WALL_KINDS=new Set(['walls','open']);
+function choosePick(hits,current=selection){let nearest=null,preferred=null,column=null;
+ for(const h of hits){
+  if(HANDLE_KINDS.has(h.data.kind))return h.data;
+  if(!nearest)nearest=h;
+  if(!preferred&&samePick(h.data,current))preferred=h;
+  if(!column&&h.data.kind==='columns')column=h;
+ }
+ if(!nearest)return null;
+ if(column&&WALL_KINDS.has(nearest.data.kind)&&column.dist-nearest.dist<=PICK_TOLERANCE)return column.data;
+ if(preferred&&preferred.dist-nearest.dist<=PICK_TOLERANCE)return preferred.data;
+ return nearest.data;
+}
+function pick(e){cast(e);const hits=[];
  for(const h of ray.intersectObjects([...helpers.children,...world.children],true)){
   if(h.object.isSprite||h.object.isLine)continue;
   let o=h.object,data;while(o){if(o.userData.pick){data=o.userData.pick;break;}o=o.parent;}
   if(!data)continue;if(cut&&(data.kind==='walls'||data.kind==='open')&&h.point.y>1.2)continue;
-  if(HANDLE_KINDS.has(data.kind))return data;
-  if(!nearest)nearest={data,dist:h.distance};
-  if(!preferred&&samePick(data,selection))preferred={data,dist:h.distance};
-  if(nearest&&preferred)break;
+  hits.push({data,dist:h.distance});
+  if(HANDLE_KINDS.has(data.kind))break;
  }
- if(preferred&&preferred.dist-nearest.dist<=PICK_TOLERANCE)return preferred.data;
- return nearest?nearest.data:null;
+ return choosePick(hits);
 }
 canvas.addEventListener('contextmenu',e=>e.preventDefault());
 canvas.addEventListener('dblclick',e=>{if(busy||tool!=='select')return;const hit=pick(e);if(hit&&hit.kind!=='slab')return;const p=floorPoint(e);if(p)createRoomAt(p);});
@@ -299,13 +311,10 @@ canvas.addEventListener('pointerdown',e=>{if(busy||e.button>2)return;stopNavigat
  if(hit?.kind==='room'&&p){selection={kind:'zones',i:hit.i};if(roomPointerDown(hit,p)){canvas.setPointerCapture(e.pointerId);refresh();return;}}
  if(hit?.kind==='furniture'){chooseFurniture(hit.i);}else if(hit?.kind==='end')selection={kind:'walls',i:hit.i};else if(hit?.kind==='vertex')selection={kind:'zones',i:hit.i};else if(hit)selection=hit;else if(!navGesture)selection=null;
  const planeY=hit?.kind==='furniture'?state.furniture[hit.i]?.y||0:0;
- // Un glissement refusé par la protection du bâti doit le dire : sans message, la vue
- // pivote et l'élément semble impossible à déplacer.
- const blocked=lockBuilding&&hit&&!['furniture','zones','room'].includes(hit.kind)?hit:null;
- pointer={id:e.pointerId,blocked,startX:e.clientX,startY:e.clientY,lastX:e.clientX,lastY:e.clientY,point:planeY?planePoint(e,planeY):p,planeY,b:e.button,pan:e.button===1||e.button===2||e.shiftKey||tool==='navigate',hit:view==='interior'||hit?.kind==='furniture'&&selected()?.locked||blocked?null:hit,ids:hit?.kind==='furniture'?furnitureIndices():[],roomIds:hit?.kind==='zones'&&roomCarry?roomContents(state.zones[hit.i]):null,before:snapshot(),original:clone(selected()),moved:false};canvas.setPointerCapture(e.pointerId);refresh();
+ pointer={id:e.pointerId,startX:e.clientX,startY:e.clientY,lastX:e.clientX,lastY:e.clientY,point:planeY?planePoint(e,planeY):p,planeY,b:e.button,pan:e.button===1||e.button===2||e.shiftKey||tool==='navigate',hit:view==='interior'||hit?.kind==='furniture'&&selected()?.locked?null:hit,ids:hit?.kind==='furniture'?furnitureIndices():[],roomIds:hit?.kind==='zones'&&roomCarry?roomContents(state.zones[hit.i]):null,before:snapshot(),original:clone(selected()),moved:false};canvas.setPointerCapture(e.pointerId);refresh();
 });
 canvas.addEventListener('pointermove',e=>{if(roomDragState){const q=planePoint(e,0);if(q)roomDragMove(q);return;}if(manipulationPointerMove(e))return;architecturePointerMove(e);if(!pointer)return;const d=pointer;const dx=e.clientX-d.lastX,dy=e.clientY-d.lastY;d.lastX=e.clientX;d.lastY=e.clientY;if(Math.hypot(e.clientX-d.startX,e.clientY-d.startY)>4)d.moved=true;if(!d.moved)return;
- if(!d.hit){if(d.blocked&&!d.warned){d.warned=true;notify('Mur ou poteau protégé : décochez « Protéger murs et poteaux du déplacement à la souris » pour le déplacer, ou saisissez ses coordonnées dans l’inspecteur.');}
+ if(!d.hit){
   if(view==='interior'){yaw+=dx*.004;pitch=Math.max(-1.3,Math.min(1.3,pitch-dy*.004));}else if(d.pan||view==='plan'){panCamera(dx,dy);}else{theta-=dx*.006;phi=Math.max(.08,Math.min(1.5,phi-dy*.006));}updateCamera();return;}
  const p=planePoint(e,d.planeY||0),a=d.original;state=JSON.parse(d.before);const o=selected();if(!p||!d.point||!o)return;const x=snap(p.x-d.point.x),z=snap(p.z-d.point.z);
  if(d.hit.kind==='vertex'){o.vertices[d.hit.vi]=nearbyPoint(p);Object.assign(o,Arch.bounds(o.vertices));}
@@ -315,12 +324,12 @@ canvas.addEventListener('pointermove',e=>{if(roomDragState){const q=planePoint(e
  else if(selection.kind==='walls'){o.x1=a.x1+x;o.x2=a.x2+x;o.z1=a.z1+z;o.z2=a.z2+z;}
  else if(selection.kind==='columns'){o.x=+(a.x+x).toFixed(4);o.z=+(a.z+z).toFixed(4);}
  else if(selection.kind==='open'){const w=state.walls[selection.wi],L=wallLength(w);o.d=Math.max(o.w/2,Math.min(L-o.w/2,snap(((p.x-w.x1)*(w.x2-w.x1)+(p.z-w.z1)*(w.z2-w.z1))/L)));}
- try{Arch.propagate(JSON.parse(d.before),state);state=validate(state);d.error=null;}catch(e){d.error=e.message;state=JSON.parse(d.before);}requestBuild();
+ try{isolateEdit(JSON.parse(d.before),state);Arch.propagate(JSON.parse(d.before),state);state=validate(state);d.error=null;}catch(e){d.error=e.message;state=JSON.parse(d.before);}requestBuild();
 });
 function endPointer(cancel=false){endRotation(cancel);roomDragEnd(cancel);if(!pointer)return;const d=pointer;pointer=null;if(d.hit&&d.moved){try{if(cancel)state=JSON.parse(d.before);else{if(d.error)throw Error(d.error);state=validate(state);record(d.before);}}catch(e){state=JSON.parse(d.before);notify(e.message+' Déplacement annulé.');}refresh();}}
 canvas.addEventListener('pointerup',()=>endPointer());canvas.addEventListener('pointercancel',()=>endPointer(true));
 canvas.addEventListener('wheel',navigationWheel,{passive:false});
-addEventListener('keydown',e=>{if(editingText(e.target)||busy)return;if(manipulationKey(e))return;if(e.key==='Enter'&&tool==='polygon'){e.preventDefault();finishPolygon();return;}if(e.key==='Escape'){stopNavigation();architectureCancel();endPointer(true);setTool('select');notify('Outil annulé.');return;}if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){e.preventDefault();historyStep(e.shiftKey);return;}if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='y'){e.preventDefault();historyStep(true);return;}if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='d'){e.preventDefault();duplicate();return;}if(e.key==='Delete'){removeSelection();return;}navigationKeyDown(e);});
+addEventListener('keydown',e=>{if(editingText(e.target)||busy||document.querySelector?.('dialog[open]'))return;if(manipulationKey(e))return;if(e.key==='Enter'&&tool==='polygon'){e.preventDefault();finishPolygon();return;}if(e.key==='Escape'){stopNavigation();architectureCancel();endPointer(true);setTool('select');notify('Outil annulé.');return;}if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){e.preventDefault();historyStep(e.shiftKey);return;}if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='y'){e.preventDefault();historyStep(true);return;}if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='d'){e.preventDefault();duplicate();return;}if(e.key==='Delete'){removeSelection();return;}navigationKeyDown(e);});
 
 // Embedded GLB only: a project must not fetch arbitrary external dependencies.
 function glbBuffer(data){const bytes=atob(data.split(',')[1]);return Uint8Array.from(bytes,c=>c.charCodeAt(0)).buffer;}
@@ -365,7 +374,7 @@ $('view3d').onclick=()=>setView('3d');$('viewPlan').onclick=()=>setView('plan');
 $('cut').onclick=()=>{cut=!cut;if(cut)roofOn=false;rebuild();};$('roof').onclick=()=>{roofOn=!roofOn;rebuild();};
 for(const id of['showLabels','showGrid','showDimensions','showZoning'])$(id).onchange=rebuild;
 $('lighting').onchange=lighting;$('demo').onclick=demo;$('demoShortcut').onclick=demo;$('createRoomHere').onclick=()=>createRoomAt(lastFloorPoint);
-$('reset').onclick=()=>commit(()=>{state=validate(DEFAULT_STATE);selection=null;notify('Étude initiale restaurée. Annuler permet de récupérer votre travail.');});
+$('reset').onclick=()=>{if(!confirm('Revenir à l’étude initiale ? Le mobilier et les modifications de la maquette seront remplacés. Annuler (Ctrl+Z) permettra de les récupérer tant que la page reste ouverte.'))return;commit(()=>{state=validate(DEFAULT_STATE);selection=null;notify('Étude initiale restaurée. Annuler permet de récupérer votre travail.');});};
 $('exportJson').onclick=exportJson;$('exportGlb').onclick=exportGlb;$('exportPng').onclick=exportPng;
 $('importJson').onclick=()=>$('jsonFile').click();$('importGlb').onclick=()=>$('glbFile').click();
 $('jsonFile').onchange=e=>{importJson(e.target.files[0]);e.target.value='';};$('glbFile').onchange=e=>{importGlb(e.target.files[0]);e.target.value='';};
@@ -374,6 +383,6 @@ addEventListener('error',e=>{if(e.message){$('status').textContent='Erreur : '+e
 async function init(){busy=true;let migrated=false,shared=false;try{const stored=await loadProject();if(stored){shared=stored.source==='partage';const candidate=validate(JSON.parse(stored.raw));state=candidate;migrated=stored.source==='localstorage';
    loadAssets(candidate).then(loaded=>{for(const [id,m] of loaded)assetCache.set(id,m);requestBuild();}).catch(e=>notify('Modèles du projet indisponibles : '+e.message));}}catch(e){notify('Sauvegarde non chargée : '+e.message+' Le fichier original reste disponible.');}
  preloadFurniture().then(()=>{if(!busy)rebuild();}).catch(e=>notify('Certains modèles détaillés sont indisponibles : '+e.message));
- busy=false;architectureSetup();setupNavigation();manipulationSetup();buildingSetup();circulationSetup();projectSetup();catalog();resize();frame();refresh();$('loading').hidden=true;$('status').textContent=shared?'Projet partagé du dépôt · vos modifications restent sur ce poste':migrated?'Sauvegarde reprise et transférée vers le stockage étendu':'Prêt · enregistrez une version dans l’espace partagé';if(migrated)persist();
+ busy=false;if(typeof Workspace!=='undefined')Workspace.setup();architectureSetup();setupNavigation();manipulationSetup();buildingSetup();circulationSetup();projectSetup();catalog();resize();frame();refresh();$('loading').hidden=true;$('status').textContent=shared?'Projet partagé du dépôt · vos modifications restent sur ce poste':migrated?'Sauvegarde reprise et transférée vers le stockage étendu':'Prêt · vos modifications sont sauvegardées sur cet appareil';if(migrated)persist();
  let lastFrame=0;function loop(now=0){requestAnimationFrame(loop);const dt=lastFrame?Math.min((now-lastFrame)/1000,.05):0;lastFrame=now;navigationStep(dt);if(buildPending)rebuild();if(dirty){renderer.render(scene,camera);dirty=false;}}loop();}
 if(typeof AtelierCloud!=='undefined')AtelierCloud.boot();else init();

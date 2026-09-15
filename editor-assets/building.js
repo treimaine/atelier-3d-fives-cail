@@ -13,13 +13,11 @@ function splitWallAt(index,t){const w=state.walls[index],L=wallLength(w),distanc
 function buildingProperties(){
  if(selection?.kind==='columns'){const c=selected();
   $('properties').insertAdjacentHTML('beforeend','<h3>Déplacer ce poteau</h3>'
-   +'<label class="check"><input id="unlockBuilding" type="checkbox" '+(lockBuilding?'':'checked')+'> Déplacer le bâti à la souris</label>'
-   +'<p class="note">Coché, le poteau sélectionné se glisse dans la scène. Sinon, utilisez les coordonnées ci-dessus ou les pas ci-dessous.</p>'
+   +'<p class="note">Glissez le poteau dans la maquette avec la souris (aimantation selon le réglage « Aimantation »). Pour une position exacte, saisissez les coordonnées ci-dessus ou utilisez les pas ci-dessous. Ctrl+Z annule.</p>'
    +'<div class="nudge">'+[['−X',-1,0],['+X',1,0],['−Z',0,-1],['+Z',0,1]].map(([n,dx,dz])=>'<button data-nudge="'+dx+' '+dz+'">'+n+'</button>').join('')
    +'<label class="field">Pas · m<input id="columnStep" type="number" min=".01" max="5" step=".05" value="'+columnStep+'"></label></div>'
    +'<button id="columnToCeiling">Monter jusqu’au plafond ('+buildingHeight().toFixed(2)+' m)</button>'
    +'<p class="note">Section et hauteur estimées : à relever sur site.</p>');
-  $('unlockBuilding').onchange=()=>{lockBuilding=!$('unlockBuilding').checked;if($('lockBuilding'))$('lockBuilding').checked=lockBuilding;notify(lockBuilding?'Murs et poteaux protégés du déplacement à la souris.':'Bâti déverrouillé : murs et poteaux se glissent à la souris.');};
   $('columnStep').onchange=()=>{columnStep=Math.min(5,Math.max(.01,+$('columnStep').value||.25));$('columnStep').value=columnStep;};
   $('properties').querySelectorAll('[data-nudge]').forEach(b=>b.onclick=()=>{const [dx,dz]=b.dataset.nudge.split(' ').map(Number);columnStep=Math.min(5,Math.max(.01,+$('columnStep').value||.25));const step=columnStep;
    commit(()=>{const c=state.building.columns[selection.i];c.x=+(c.x+dx*step).toFixed(4);c.z=+(c.z+dz*step).toFixed(4);});});

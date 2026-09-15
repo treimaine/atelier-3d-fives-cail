@@ -139,7 +139,7 @@ function projectRefresh(){
  if($('variantCompare').open)$('compareTable').innerHTML=compareVariants();}
 
 function projectSetup(){
- $('inspector').insertAdjacentHTML('beforeend','<details id="variantCompare"><summary>Variantes &amp; vues</summary>'
+ $('panel-selection').insertAdjacentHTML('beforeend','<details id="variantCompare"><summary>Variantes &amp; vues</summary>'
   +'<div class="section-title">VARIANTES D’IMPLANTATION <button id="saveVariant">＋ Figer</button></div><div id="variantList"></div>'
   +'<div id="compareTable"></div>'
   +'<div class="section-title">VUES MÉMORISÉES <button id="saveView">＋ Cadrage</button></div><div id="viewList"></div>'
@@ -147,7 +147,7 @@ function projectSetup(){
  $('saveVariant').onclick=()=>{const name=prompt('Nom de la variante','Implantation '+((state.variants||[]).length+1));if(name!==null)saveLayoutVariant(name.trim()||'Variante');};
  $('saveView').onclick=()=>{const name=prompt('Nom de la vue','Vue '+((state.views||[]).length+1));if(name!==null)saveNamedView(name.trim()||'Vue');};
  $('variantCompare').addEventListener('toggle',()=>{if($('variantCompare').open)$('compareTable').innerHTML=compareVariants();});
- if(typeof AtelierCloud==='undefined'){$('inspector').insertAdjacentHTML('beforeend','<details><summary>Projet partagé</summary>'
+ if(typeof AtelierCloud==='undefined'){$('panel-selection').insertAdjacentHTML('beforeend','<details><summary>Projet partagé</summary>'
   +'<button id="publishShared">Préparer projet.json pour le dépôt</button>'
   +'<button id="reloadShared">Recharger le projet du dépôt</button>'
   +'<p class="note">L’application repart du fichier <code>projet.json</code> publié à côté d’elle. Vos modifications restent sur votre poste tant que ce fichier n’est pas remplacé dans le dépôt : préparez-le, déposez-le, chacun le recharge.</p></details>');
