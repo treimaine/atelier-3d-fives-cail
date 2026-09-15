@@ -2,7 +2,7 @@
 
 Éditeur d'aménagement 3D du local, dans le navigateur. Une unité du monde vaut un mètre : X et Z au sol, Y en hauteur.
 
-Site statique, sans serveur ni base de données. Ouvrir `index.html` suffit ; Vercel sert le dépôt tel quel.
+Éditeur statique servi par Vercel, avec authentification et versions partagées privées dans Supabase. Aucun serveur applicatif ni build à déployer. Voir [DEPLOIEMENT.md](DEPLOIEMENT.md) pour le déploiement et l’ajout des associés.
 
 ## Travailler dessus
 
@@ -18,7 +18,9 @@ node editor-assets/test-editor.cjs
 
 110 vérifications automatisées : géométrie, contraintes de murs, collisions, circulation, manipulation, sauvegarde, variantes. **Les lancer avant de pousser** — plusieurs verrouillent des acquis de l'étude, par exemple que la proposition livrée reste parcourable à 0,90 m et que tous les poteaux tiennent dans l'emprise.
 
-Aucune dépendance à installer : three.js est embarqué dans `editor-assets/vendor`.
+Aucune dépendance à installer : three.js et le client Supabase sont embarqués dans `editor-assets/vendor`.
+
+Tests du partage : `node --test editor-assets/test-cloud.cjs`.
 
 ## Où se trouve quoi
 
@@ -40,24 +42,21 @@ Aucune dépendance à installer : three.js est embarqué dans `editor-assets/ven
 
 Les modules partagent une portée globale et se chargent dans l'ordre déclaré par `index.html` : pas de bundler, pas d'étape de build. Modifier un fichier, recharger la page.
 
-## Le projet partagé, et ce qui est vraiment persistant
+## Le projet partagé
 
-À l'ouverture, l'application charge `projet.json` **si le visiteur n'a pas déjà un projet sur son poste**. Ensuite, chaque personne travaille sur sa copie, enregistrée dans le stockage de son navigateur (IndexedDB). Rien ne remonte automatiquement : deux personnes qui aménagent en même temps ne voient pas le travail l'une de l'autre.
+Chaque membre se connecte avec son compte. Son brouillon est sauvegardé sur son appareil ; le bouton **Enregistrer une version partagée** crée une proposition datée et consultable par l’équipe, sans écraser les autres versions. L’administrateur choisit la version de référence.
 
-Pour qu'une modification devienne celle de l'équipe :
+Le module `editor-assets/cloud.js` gère la connexion, les versions et la référence. `editor-assets/cloud-config.js` contient uniquement l’URL du projet Supabase et sa clé publique. Les permissions sont appliquées dans Supabase ; les comptes non membres ne peuvent pas lire ni écrire les données.
 
-1. Dans l'inspecteur, ouvrir **Projet partagé** et cliquer **Préparer projet.json pour le dépôt**.
-2. Remplacer `projet.json` à la racine du dépôt par le fichier téléchargé, puis pousser. Vercel redéploie.
-3. Les autres cliquent **Recharger le projet du dépôt** — ou repartent de zéro sur un poste neuf.
-
-L'historique du fichier dans Git tient lieu de suivi des versions ; chaque export incrémente le numéro de révision du projet. Pour un aménagement à plusieurs en simultané, il faudrait un service de stockage partagé et une authentification : ce dépôt n'en a pas, volontairement, et l'URL publique ne doit pas pouvoir être écrasée par n'importe qui.
+Les plans et modèles importés sont inclus dans les versions privées (49 Mo maximum par version). Le fichier `projet.json` reste l’étude initiale livrée avec le dépôt, utilisée uniquement lorsqu’aucune référence distante ni copie locale n’existe.
 
 ## Déploiement
 
-Vercel, préréglage **Other**, aucune commande de build, aucun répertoire de sortie, aucune variable d'environnement. `vercel.json` règle les en-têtes de cache et de sécurité. Tout `push` sur la branche par défaut redéploie.
+Vercel, préréglage **Other**, aucune commande de build, aucun répertoire de sortie personnalisé, aucune variable d’environnement. Le projet Supabase est déjà configuré. Voir **[DEPLOIEMENT.md](DEPLOIEMENT.md)** pour les instructions et la gestion des comptes.
 
 ## Licences
 
+- Supabase JS 2.116.0 : MIT, `editor-assets/vendor/LICENSE-supabase.txt`.
 - three.js r128, chargeur et exportateur glTF : MIT, `editor-assets/vendor/LICENSE-three.txt`.
 - Modèles détaillés : Khronos glTF-Sample-Assets, CC0 et CC-BY 4.0 selon le modèle. Auteurs et conditions dans `editor-assets/models/ATTRIBUTIONS.md` et les fichiers `*-LICENSE.md`. Les sources `.glb` ne sont pas versionnées : elles se retéléchargent depuis le dépôt Khronos indiqué dans les attributions.
 

@@ -7,6 +7,8 @@ let dbHandle=null,dbBroken=false;
 // Une ouverture peut rester en attente indéfiniment (autre onglet en cours de mise à jour,
 // suppression de base en cours) : sans délai, le chargement de l'atelier ne se terminerait jamais.
 const DB_TIMEOUT=4000;
+const projectStorageKey=()=>typeof AtelierCloud!=='undefined'?AtelierCloud.storageKey():'courant';
+const projectLocalKey=key=>typeof AtelierCloud!=='undefined'?AtelierCloud.localKey(key):key;
 const withTimeout=(promise,ms,fallback)=>Promise.race([promise,new Promise(resolve=>setTimeout(()=>resolve(fallback),ms))]);
 function openProjectDb(){
  if(dbBroken||!globalThis.indexedDB)return Promise.resolve(null);
@@ -27,14 +29,14 @@ function dbGet(key){return openProjectDb().then(db=>db&&new Promise(resolve=>{
 // Écriture différée : un glissement ne doit pas déclencher une transaction par image.
 let persistTimer=null,persistPending=null;
 function persistProject(){
- persistPending=snapshot();
+ persistPending={payload:snapshot(),key:projectStorageKey(),localKey:projectLocalKey(KEY)};
  if(persistTimer)return;
- persistTimer=setTimeout(()=>{persistTimer=null;const payload=persistPending;persistPending=null;
-  dbPut('courant',payload).then(ok=>{
-   if(ok){saved=true;$('status').textContent='● Sauvegardé sur cet appareil';try{localStorage.setItem(KEY,'{"movedTo":"indexeddb"}');}catch(e){}return;}
-   try{localStorage.setItem(KEY,payload);saved=true;$('status').textContent='● Sauvegardé sur cet appareil (stockage simple)';}
+ persistTimer=setTimeout(()=>{persistTimer=null;const {payload,key,localKey}=persistPending;persistPending=null;
+  dbPut(key,payload).then(ok=>{
+   if(ok){saved=true;$('status').textContent='● Sauvegardé sur cet appareil';try{localStorage.setItem(localKey,'{"movedTo":"indexeddb"}');}catch(e){}return;}
+   try{localStorage.setItem(localKey,payload);saved=true;$('status').textContent='● Sauvegardé sur cet appareil (stockage simple)';}
    catch(e){saved=false;$('status').textContent='● Sauvegarde locale impossible — exportez le JSON';}
-  }).catch(()=>{try{localStorage.setItem(KEY,payload);saved=true;$('status').textContent='● Sauvegardé sur cet appareil (stockage simple)';}
+  }).catch(()=>{try{localStorage.setItem(localKey,payload);saved=true;$('status').textContent='● Sauvegardé sur cet appareil (stockage simple)';}
    catch(e){saved=false;$('status').textContent='● Sauvegarde locale saturée — exportez le JSON';}});
  },400);}
 // Projet partagé : le fichier projet.json versionné à côté de la page sert de point de départ
@@ -47,10 +49,11 @@ async function fetchSharedProject(){
   const raw=await response.text();
   JSON.parse(raw);return raw;}catch(e){return null;}}
 async function loadProject(){
- const stored=await withTimeout(dbGet('courant').catch(()=>null),DB_TIMEOUT,null);
+ const stored=await withTimeout(dbGet(projectStorageKey()).catch(()=>null),DB_TIMEOUT,null);
  if(typeof stored==='string'&&stored.length>2)return {raw:stored,source:'indexeddb'};
- let local=null;try{local=localStorage.getItem(KEY)||localStorage.getItem(LEGACY);}catch(e){}
+ let local=null;try{local=localStorage.getItem(projectLocalKey(KEY))||localStorage.getItem(projectLocalKey(LEGACY));}catch(e){}
  if(local&&!local.includes('"movedTo"'))return {raw:local,source:'localstorage'};
+ if(typeof AtelierCloud!=='undefined'&&AtelierCloud.configured()){const cloud=await AtelierCloud.initialProject();if(cloud)return cloud;}
  const shared=await fetchSharedProject();
  if(shared)return {raw:shared,source:'partage'};
  return null;}
@@ -144,10 +147,10 @@ function projectSetup(){
  $('saveVariant').onclick=()=>{const name=prompt('Nom de la variante','Implantation '+((state.variants||[]).length+1));if(name!==null)saveLayoutVariant(name.trim()||'Variante');};
  $('saveView').onclick=()=>{const name=prompt('Nom de la vue','Vue '+((state.views||[]).length+1));if(name!==null)saveNamedView(name.trim()||'Vue');};
  $('variantCompare').addEventListener('toggle',()=>{if($('variantCompare').open)$('compareTable').innerHTML=compareVariants();});
- $('inspector').insertAdjacentHTML('beforeend','<details><summary>Projet partagé</summary>'
+ if(typeof AtelierCloud==='undefined'){$('inspector').insertAdjacentHTML('beforeend','<details><summary>Projet partagé</summary>'
   +'<button id="publishShared">Préparer projet.json pour le dépôt</button>'
   +'<button id="reloadShared">Recharger le projet du dépôt</button>'
   +'<p class="note">L’application repart du fichier <code>projet.json</code> publié à côté d’elle. Vos modifications restent sur votre poste tant que ce fichier n’est pas remplacé dans le dépôt : préparez-le, déposez-le, chacun le recharge.</p></details>');
  $('publishShared').onclick=exportSharedProject;
- $('reloadShared').onclick=reloadSharedProject;
+ $('reloadShared').onclick=reloadSharedProject;}
  projectRefresh();}

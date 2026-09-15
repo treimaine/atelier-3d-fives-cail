@@ -4,7 +4,7 @@
 
 L’éditeur conserve l’emprise et les poteaux estimés de l’étude. La V4 ajoute un fond de plan calibrable, des pièces polygonales liées à leurs murs, des contraintes géométriques, deux modèles GLB détaillés et des contrôles d’implantation. Les anciens projets restent importables.
 
-L’application vit dans le dépôt `atelier-3d-fives-cail/` — en ligne sur https://github.com/treimaine/atelier-3d-fives-cail. Ouvrir `index.html` suffit. Pour l’aperçu local : `node editor-assets/preview.cjs` depuis ce dossier, puis `http://127.0.0.1:8766` ; le serveur est limité à la boucle locale. La mise en ligne est décrite dans `DEPLOIEMENT_VERCEL.md`.
+L’application vit dans le dépôt `atelier-3d-fives-cail/` — en ligne sur https://github.com/treimaine/atelier-3d-fives-cail. La version partagée demande une connexion avec un compte autorisé. Pour l’aperçu local : `node editor-assets/preview.cjs` depuis ce dossier, puis `http://127.0.0.1:8766` ; le serveur est limité à la boucle locale. La mise en ligne et la gestion des comptes sont décrites dans [DEPLOIEMENT.md](DEPLOIEMENT.md).
 
 ## Calibrer un plan
 
@@ -316,3 +316,10 @@ L’éditeur n’est plus à la racine du dossier de travail : il constitue son 
 
 Ce qui ne part pas sur GitHub est rangé dans `atelier-3d-sources/` : les modèles Khronos d’origine au format `.glb` (43 Mo, qui servent à régénérer les fichiers `.js` embarqués), les scripts de migration déjà appliqués, et trois états antérieurs de l’éditeur. Rien de tout cela n’est nécessaire pour faire tourner ou déployer l’application.
 
+
+
+## Septembre 2026 — Comptes et versions partagées
+
+La connexion et le partage utilisent maintenant Supabase. Un compte autorisé est nécessaire. Les versions sont privées, datées et attribuées à leur auteur. Le bouton **Enregistrer une version partagée** publie une nouvelle proposition ; **Ouvrir une copie** conserve d’abord le travail courant dans une copie de secours locale. L’administrateur choisit la référence de l’équipe. Les déplacements d’objets restent locaux jusqu’au prochain enregistrement partagé.
+
+Le déploiement actuel se fait directement depuis ce dépôt, sans script de build. Les anciens paragraphes de ce journal concernant `build-web.cjs`, `atelier-3d-web` et `DEPLOIEMENT_VERCEL.md` décrivent des étapes historiques. Les instructions actuelles sont dans [DEPLOIEMENT.md](DEPLOIEMENT.md).
