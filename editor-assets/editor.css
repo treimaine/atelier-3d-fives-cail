@@ -9,3 +9,39 @@
 .nudge{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px;margin:8px 0}#properties .nudge button{margin:0;padding:7px 0;text-align:center}.nudge .field{grid-column:1/-1;margin:2px 0 0}
 
 .compare{width:100%;border-collapse:collapse;font-size:10px;margin:10px 0}.compare th{text-align:left;font-weight:500;color:var(--muted);padding:5px 3px;border-bottom:1px solid var(--line)}.compare td{padding:5px 3px;border-bottom:1px solid #2a332e}.compare td.bad{color:#e7a39c}.compare small{color:var(--muted)}.row{display:flex;gap:4px;align-items:stretch}.row .item{flex:1}#inspector .row button.danger{border:0;background:transparent;padding:0 9px;margin:0}
+/* Commandes de caméra : accessibles au pointeur et au clavier sans toucher au projet. */
+#cameraControls{position:absolute;right:18px;bottom:18px;display:flex;align-items:flex-end;gap:10px;z-index:2}
+.compass{display:grid;grid-template-columns:repeat(3,28px);grid-template-rows:repeat(3,28px);gap:2px;align-items:center;justify-items:center;padding:7px;background:#edf0e7ed;border:1px solid #adb6aa;border-radius:12px;box-shadow:0 3px 14px #23301d24}
+.compass button{width:28px;height:28px;padding:0;border:0;border-radius:6px;background:transparent;color:#36513e;font-size:12px;font-weight:700}
+.compass button:hover,.compass button:focus-visible{background:#cad9c8}
+.compass .north{grid-column:2;grid-row:1}.compass .west{grid-column:1;grid-row:2}.compass .east{grid-column:3;grid-row:2}.compass .south{grid-column:2;grid-row:3}
+.compass-center{grid-column:2;grid-row:2;color:#a77e58;font-size:18px}
+.zoom-controls{display:grid;gap:4px;padding:4px;background:#edf0e7ed;border:1px solid #adb6aa;border-radius:9px;box-shadow:0 3px 14px #23301d24}
+.zoom-controls button{width:34px;height:34px;padding:0;background:#fff;color:#334d3d;border:0;font-size:20px;line-height:1}
+.zoom-controls button:hover{background:#cad9c8}
+@media(max-width:850px){#cameraControls{right:8px;bottom:8px;gap:5px}.compass{grid-template-columns:repeat(3,23px);grid-template-rows:repeat(3,23px);padding:4px}.compass button{width:23px;height:23px}.zoom-controls button{width:29px;height:29px}}
+/* Mode présentation */
+body.presenting header,body.presenting aside,body.presenting footer,body.presenting #viewbar,body.presenting #sceneCaption,body.presenting #viewTools,body.presenting #cameraControls,body.presenting #scaleBadge,body.presenting #navigationHint,body.presenting #notice,body.presenting #readOnlyBanner{display:none!important}
+body.presenting #viewport{left:0!important;right:0!important;top:0!important;bottom:0!important}
+#presentation{position:fixed;inset:0;z-index:50;pointer-events:none;color:#f4efe6}
+#presentation[hidden]{display:none}
+#presentation .pres-shield{position:absolute;inset:0;pointer-events:auto;background:radial-gradient(ellipse at 20% 100%,rgba(12,18,16,.55),transparent 55%),linear-gradient(180deg,rgba(12,18,16,.45),transparent 22%)}
+.pres-top{position:absolute;top:28px;left:36px;display:flex;gap:14px;align-items:center}
+.pres-top .brandmark{border-color:rgba(244,239,230,.7);color:#f4efe6}
+.pres-top strong{font-size:13px;letter-spacing:2px}.pres-top strong span{font-weight:400;opacity:.75}.pres-top small{display:block;margin-top:4px;opacity:.75;font-size:11px;letter-spacing:.5px}
+.pres-card{position:absolute;left:36px;bottom:92px;max-width:min(560px,calc(100vw - 72px));background:rgba(20,28,25,.82);backdrop-filter:blur(10px);border:1px solid rgba(226,177,138,.35);border-radius:14px;padding:22px 26px 20px;box-shadow:0 18px 50px rgba(0,0,0,.35)}
+.pres-card.enter{animation:presIn .7s cubic-bezier(.2,.7,.2,1)}
+@keyframes presIn{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+.pres-card .eyebrow{color:var(--accent)}
+.pres-card h2{font:400 34px/1.1 Georgia,'Times New Roman',serif;margin:8px 0 10px}
+.pres-meta{font-size:13px;color:#e8d6c4;margin:0 0 10px;letter-spacing:.3px}
+.pres-text{font-size:14px;line-height:1.5;color:#cfd6d2;margin:0}
+.pres-controls{position:absolute;right:36px;bottom:34px;display:flex;gap:6px;pointer-events:auto}
+.pres-controls button{background:rgba(20,28,25,.8);border-color:rgba(244,239,230,.25);color:#f4efe6;min-width:40px;padding:9px 12px;backdrop-filter:blur(6px)}
+.pres-controls button:hover{background:rgba(70,83,76,.9)}
+.pres-progress{position:absolute;left:0;right:0;bottom:0;height:3px;background:rgba(244,239,230,.12)}
+.pres-progress span{display:block;height:100%;width:0;background:var(--accent)}
+.pres-dots{position:absolute;left:36px;bottom:40px;display:flex;gap:7px;pointer-events:auto}
+.pres-dots button{width:9px;height:9px;padding:0;border-radius:50%;background:rgba(244,239,230,.3);border:0}
+.pres-dots button.active{background:var(--accent);width:24px;border-radius:5px}
+@media (max-width:700px){.pres-top{top:14px;left:16px}.pres-card{left:16px;right:16px;bottom:96px;padding:16px}.pres-card h2{font-size:24px}.pres-controls{right:16px;left:16px;bottom:30px;justify-content:flex-end;flex-wrap:wrap}.pres-dots{left:16px;bottom:12px}}

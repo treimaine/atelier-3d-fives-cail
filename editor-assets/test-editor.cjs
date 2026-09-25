@@ -1,9 +1,11 @@
-const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict'),THREE=require('./vendor/three.min.js');
+// three r186 n'existe qu'en module ES : le banc l'importe avant de monter le contexte.
+(async()=>{const THREE=await import('./vendor/three/three.module.js');
+const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
 const elements=new Map();
 function element(id=''){if(elements.has(id))return elements.get(id);const e={value:id==='snap'?'.25':'',checked:['showGrid','showDimensions'].includes(id),hidden:false,style:{},dataset:{},classList:{toggle(){}},textContent:'',innerHTML:'',clientWidth:900,clientHeight:650,events:{},getBoundingClientRect(){return {left:0,top:0,width:900,height:650};},getContext(){return {fillRect(){},strokeRect(){},beginPath(){},moveTo(){},lineTo(){},stroke(){},fillText(){}};},addEventListener(k,fn){this.events[k]=fn;},insertAdjacentHTML(){},querySelectorAll(){return [];},focus(){},setPointerCapture(){},click(){}};if(id)elements.set(id,e);return e;}
 class Renderer{constructor(){this.shadowMap={};this.info={memory:{}};}setPixelRatio(){}setSize(){}render(){}}
 const store=new Map();const ctx=vm.createContext({THREE:{...THREE,WebGLRenderer:Renderer},document:{getElementById:element,createElement:()=>element(),querySelectorAll:()=>[]},localStorage:{getItem:k=>store.get(k)||null,setItem:(k,v)=>store.set(k,v)},devicePixelRatio:1,ResizeObserver:class{observe(){}},requestAnimationFrame(){},addEventListener(){},setTimeout(){return 0;},clearTimeout(){},console,TextDecoder,DataView,Uint8Array,ArrayBuffer,Math,Blob,URL,atob,btoa});
-vm.runInContext(fs.readFileSync(__dirname+'/defaults.js','utf8'),ctx);vm.runInContext(fs.readFileSync(__dirname+'/architecture-core.js','utf8'),ctx);vm.runInContext(fs.readFileSync(__dirname+'/architecture-ui.js','utf8'),ctx);vm.runInContext(fs.readFileSync(__dirname+'/navigation.js','utf8'),ctx);vm.runInContext(fs.readFileSync(__dirname+'/manipulation.js','utf8'),ctx);vm.runInContext(fs.readFileSync(__dirname+'/equipment.js','utf8'),ctx);vm.runInContext(fs.readFileSync(__dirname+'/building.js','utf8'),ctx);vm.runInContext(fs.readFileSync(__dirname+'/circulation.js','utf8'),ctx);vm.runInContext(fs.readFileSync(__dirname+'/project.js','utf8'),ctx);vm.runInContext(fs.readFileSync(__dirname+'/rooms.js','utf8'),ctx);vm.runInContext(fs.readFileSync(__dirname+'/editor.js','utf8').replace(/if\(typeof AtelierCloud[^\n]+\n?$/, ''),ctx);
+vm.runInContext(fs.readFileSync(__dirname+'/defaults.js','utf8'),ctx);vm.runInContext(fs.readFileSync(__dirname+'/catalog-extra.js','utf8'),ctx);vm.runInContext(fs.readFileSync(__dirname+'/catalog-detail.js','utf8'),ctx);vm.runInContext(fs.readFileSync(__dirname+'/architecture-core.js','utf8'),ctx);vm.runInContext(fs.readFileSync(__dirname+'/architecture-ui.js','utf8'),ctx);vm.runInContext(fs.readFileSync(__dirname+'/navigation.js','utf8'),ctx);vm.runInContext(fs.readFileSync(__dirname+'/manipulation.js','utf8'),ctx);vm.runInContext(fs.readFileSync(__dirname+'/equipment.js','utf8'),ctx);vm.runInContext(fs.readFileSync(__dirname+'/building.js','utf8'),ctx);vm.runInContext(fs.readFileSync(__dirname+'/circulation.js','utf8'),ctx);vm.runInContext(fs.readFileSync(__dirname+'/project.js','utf8'),ctx);vm.runInContext(fs.readFileSync(__dirname+'/rooms.js','utf8'),ctx);vm.runInContext(fs.readFileSync(__dirname+'/editor.js','utf8').replace(/if\(typeof AtelierCloud[^\n]+\n?$/, ''),ctx);
 // Tests share one editor context: they are queued and run strictly in order, awaiting async ones.
 const run=s=>vm.runInContext(s,ctx);let tests=0;const queue=[];function test(name,fn){queue.push([name,fn]);}
 test('Legacy defaults import with unchanged walls and openings',()=>{assert.equal(run('state.walls.length'),13);assert.equal(run('state.zones.length'),8);assert.equal(run('state.walls[1].op[0].w'),1.4);});
@@ -17,12 +19,12 @@ test('Opening exceeding lintel height is rejected',()=>assert.throws(()=>run('va
 test('Unknown asset references are rejected',()=>assert.throws(()=>run('validate({...clone(state),furniture:[{type:"custom",assetId:"missing",x:0,z:0}]})')));
 test('Failed edits restore both state and selection',()=>{run('selection={kind:"walls",i:0};commit(()=>{state.walls[0].h=-1;selection={kind:"walls",i:999};})');assert.equal(run('selection.i'),0);assert.equal(run('state.walls[0].h'),3.4);});
 test('Selecting a zone creates no history',()=>{const before=run('undoStack.length');run('select({kind:"zones",i:0})');assert.equal(run('undoStack.length'),before);});
-test('Furnished proposal adds 46 editable objects',()=>{run('demo()');assert.equal(run('state.furniture.length'),46);});
-test('Proposal cannot be inserted twice',()=>{run('demo()');assert.equal(run('state.furniture.length'),46);});
+test('Furnished proposal adds 70 editable objects',()=>{run('demo()');assert.equal(run('state.furniture.length'),70);});
+test('Proposal cannot be inserted twice',()=>{run('demo()');assert.equal(run('state.furniture.length'),70);});
 test('Updated proposal clears the original counter and door obstructions',()=>{assert.equal(run('Arch.collisions(state).hard.length'),0);assert.equal(run('Arch.collisions(state).doors.length'),0);});
 test('All furniture dimensions equal displayed bounding boxes',()=>{const results=run('Object.keys(FURN_TYPES).map(type=>{const f=validate({...clone(DEFAULT_STATE),furniture:[{type,x:0,z:0}]}).furniture[0];const g=furnitureModel(f),b=new THREE.Box3().setFromObject(g).getSize(new THREE.Vector3());return {type,error:Math.max(Math.abs(b.x-f.w),Math.abs(b.y-f.h),Math.abs(b.z-f.d))};})');for(const r of results)assert.ok(r.error<1e-5,r.type+': '+r.error);});
-test('Undo and redo restore the complete proposal',()=>{run('historyStep()');assert.equal(run('state.furniture.length'),0);run('historyStep(true)');assert.equal(run('state.furniture.length'),46);});
-test('Duplicate and delete can both be undone',()=>{run('select({kind:"furniture",i:0});duplicate()');assert.equal(run('state.furniture.length'),47);run('removeSelection()');assert.equal(run('state.furniture.length'),46);run('historyStep()');assert.equal(run('state.furniture.length'),47);run('historyStep()');assert.equal(run('state.furniture.length'),46);});
+test('Undo and redo restore the complete proposal',()=>{run('historyStep()');assert.equal(run('state.furniture.length'),0);run('historyStep(true)');assert.equal(run('state.furniture.length'),70);});
+test('Duplicate and delete can both be undone',()=>{run('select({kind:"furniture",i:0});duplicate()');assert.equal(run('state.furniture.length'),71);run('removeSelection()');assert.equal(run('state.furniture.length'),70);run('historyStep()');assert.equal(run('state.furniture.length'),71);run('historyStep()');assert.equal(run('state.furniture.length'),70);});
 test('Plan uses a vertical orthographic camera',()=>{run('setView("plan")');assert.equal(run('camera.isOrthographicCamera'),true);assert.ok(run('Math.abs(camera.getWorldDirection(new THREE.Vector3()).y+1)<1e-6'));});
 test('Interior eye height is 1.65 m',()=>{run('setView("interior")');assert.equal(run('camera.position.y'),1.65);assert.equal(run('cut'),false);});
 test('Ceiling follows the editable outline and carries its beams',()=>{
@@ -62,13 +64,13 @@ test('Changing swing side clears the opposite-side obstruction',()=>assert.equal
 test('Clearance warnings are separate from physical collisions',()=>{assert.equal(run('Arch.collisions({walls:[],furniture:[{n:"a",x:1,z:1,w:1,d:1,h:1,y:0,r:0},{n:"b",x:2.3,z:1,w:1,d:1,h:1,y:0,r:0}]},.6).hard.length'),0);assert.equal(run('Arch.collisions({walls:[],furniture:[{n:"a",x:1,z:1,w:1,d:1,h:1,y:0,r:0},{n:"b",x:2.3,z:1,w:1,d:1,h:1,y:0,r:0}]},.6).clear.length'),1);});
 test('Builtin models store one compact reference, not repeated binaries',()=>assert.ok(run('(()=>{const s=validate({...clone(DEFAULT_STATE),assets:{asset_builtin_chair:{builtin:"chair"}},furniture:[{type:"custom",assetId:"asset_builtin_chair",x:18,z:18,w:1,d:1,h:1}]});return s.assets.asset_builtin_chair.builtin==="chair"&&!s.assets.asset_builtin_chair.data;})()')));
 test('Deleting an earlier room does not move unrelated linked rooms',()=>assert.ok(run('(()=>{const room={n:"Room",vertices:[{x:0,z:0},{x:4,z:0},{x:0,z:3}],nodes:["a","b","c"]};const a=validate({zones:[{n:"Unrelated",x:10,z:10,w:4,d:3},room],furniture:[],walls:[{...DW(0,0,4,0),n1:"a",n2:"b"},{...DW(4,0,0,3),n1:"b",n2:"c"},{...DW(0,3,0,0),n1:"c",n2:"a"}]});const b=clone(a);b.zones.shift();Arch.propagate(a,b);return JSON.stringify(b.walls)===JSON.stringify(a.walls);})()')));
-test('Legacy furniture automatically references detailed models without moving objects',()=>{
+test('Legacy plants reference their detailed model; chairs and sofas keep undistorted parametric models',()=>{
  const result=JSON.parse(run('JSON.stringify(validate({...clone(DEFAULT_STATE),furniture:[{type:"chair",x:3,z:4,w:.6,d:.7,h:.9,r:1},{type:"plant",x:5,z:6},{type:"sofa",x:7,z:8}]}))'));
- assert.equal(result.assets.asset_builtin_chair.builtin,'chair');assert.equal(result.assets.asset_builtin_plant.builtin,'plant');assert.equal(result.assets.asset_builtin_sofa.builtin,'sofa');assert.equal(result.furniture[0].x,3);assert.equal(result.furniture[0].w,.6);assert.equal(result.furniture[0].r,1);
+ assert.equal(result.assets.asset_builtin_chair,undefined);assert.equal(result.assets.asset_builtin_plant.builtin,'plant');assert.equal(result.assets.asset_builtin_sofa,undefined);assert.equal(result.furniture[0].x,3);assert.equal(result.furniture[0].w,.6);assert.equal(result.furniture[0].r,1);
 });
 test('Detailed replacements share geometry and preserve displayed bounds',()=>{
- run('var modelTest=new THREE.Group();var meshTest=new THREE.Mesh(new THREE.BoxGeometry(1,1,1),new THREE.MeshStandardMaterial());meshTest.position.y=.5;modelTest.add(meshTest);assetCache.set("asset_builtin_chair",modelTest);var detailTest=furnitureModel({type:"chair",w:.6,h:.9,d:.7,c:"#ffffff"});detailTest.updateMatrixWorld(true);var detailBounds=new THREE.Box3().setFromObject(detailTest).getSize(new THREE.Vector3());');
- assert.ok(Math.abs(run('detailBounds.x')-.6)<1e-6);assert.ok(Math.abs(run('detailBounds.y')-.9)<1e-6);assert.equal(run('detailTest.children[0].children[0].geometry===meshTest.geometry'),true);assert.equal(run('detailTest.children[0].children[0].userData.assetShared'),true);run('assetCache.delete("asset_builtin_chair")');
+ run('var modelTest=new THREE.Group();var meshTest=new THREE.Mesh(new THREE.BoxGeometry(1,1,1),new THREE.MeshStandardMaterial());meshTest.position.y=.5;modelTest.add(meshTest);assetCache.set("asset_builtin_plant",modelTest);var detailTest=furnitureModel({type:"plant",w:.6,h:.9,d:.7,c:"#ffffff"});detailTest.updateMatrixWorld(true);var detailBounds=new THREE.Box3().setFromObject(detailTest).getSize(new THREE.Vector3());');
+ assert.ok(Math.abs(run('detailBounds.x')-.6)<1e-6);assert.ok(Math.abs(run('detailBounds.y')-.9)<1e-6);assert.equal(run('detailTest.children[0].children[0].geometry===meshTest.geometry'),true);assert.equal(run('detailTest.children[0].children[0].userData.assetShared'),true);run('assetCache.delete("asset_builtin_plant")');
 });
 test('Perspective arrows translate the camera without editing the project',()=>{
  run('setView("3d");frame();theta=0;var navBefore=snapshot(),historyBefore=undoStack.length;navigationKeys.add("arrowright");navigationStep(.05);stopNavigation();');assert.ok(run('target.x')>0);assert.equal(run('target.z'),0);assert.equal(run('snapshot()===navBefore'),true);assert.equal(run('undoStack.length===historyBefore'),true);
@@ -90,6 +92,20 @@ test('Each view restores its previous camera and display settings',()=>{
 });
 test('Wheel zoom keeps the plan point under the cursor',()=>{
  run('setView("plan");frame();var wheelTest={clientX:300,clientY:200,deltaY:-100,deltaMode:0,preventDefault(){}};var anchorBefore=floorPoint(wheelTest);navigationWheel(wheelTest);var anchorAfter=floorPoint(wheelTest)');assert.ok(run('Math.hypot(anchorBefore.x-anchorAfter.x,anchorBefore.z-anchorAfter.z)')<1e-7);
+});
+test('Camera controls orient and zoom without changing the project',()=>{
+ run('setView("3d");frame();var cameraBefore=snapshot(),cameraHistory=undoStack.length;compassDirection("east")');
+ assert.equal(run('theta'),Math.PI/2);
+ assert.equal(run('phi'),.83);
+ run('var beforeZoom=dist;cameraZoom(1)');
+ assert.ok(run('dist<beforeZoom'));
+ run('cameraZoom(-1)');
+ assert.ok(Math.abs(run('dist-beforeZoom'))<1e-9);
+ assert.equal(run('snapshot()===cameraBefore'),true);
+ assert.equal(run('undoStack.length'),run('cameraHistory'));
+ run('setView("interior");var beforeEye=eye.clone();cameraZoom(1)');
+ assert.ok(run('eye.distanceTo(beforeEye)')>.5);
+ assert.equal(run('eye.y'),1.65);
 });
 test('Modifier shortcuts do not start movement',()=>{
  run('stopNavigation();navigationKeyDown({key:"d",ctrlKey:true,preventDefault(){}})');assert.equal(run('navigationKeys.size'),0);
@@ -132,9 +148,9 @@ test('Placement refuses a footprint outside the building outline',()=>{
 });
 test('The catalogue announces the dimensions that are actually placed',()=>{
  assert.equal(run('catalogSize("table").w'),.9);assert.equal(run('catalogSize("table").native'),false);
- run('var sizedModel=new THREE.Group();sizedModel.userData.originalSize=new THREE.Vector3(.83,.69,.57);assetCache.set("asset_builtin_chair",sizedModel)');
- assert.equal(run('catalogSize("chair").w'),.83);assert.equal(run('catalogSize("chair").native'),true);
- run('assetCache.delete("asset_builtin_chair")');
+ run('var sizedModel=new THREE.Group();sizedModel.userData.originalSize=new THREE.Vector3(.83,.69,.57);assetCache.set("asset_builtin_plant",sizedModel)');
+ assert.equal(run('catalogSize("plant").w'),.83);assert.equal(run('catalogSize("plant").native'),true);
+ run('assetCache.delete("asset_builtin_plant")');
 });
 test('Every catalogue object carries a trade category',()=>assert.ok(run('Object.values(FURN_TYPES).every(t=>FURN_CATEGORIES[t.cat])')));
 test('The initial study has no overlapping zones',()=>{
@@ -224,7 +240,9 @@ test('Collisions follow the edited columns, not the inherited list',()=>{
  run('historyStep()');assert.equal(run('Arch.collisions(state).hard.length'),0);
 });
 test('Wall-mounted catalogue items are drafted at their mounting height',()=>{
- assert.equal(run('catalogDraft("panneau").y'),.6);assert.equal(run('catalogDraft("lavabo").y'),.8);
+ assert.equal(run('catalogDraft("panneau").y'),.6);assert.equal(run('catalogDraft("lavabo").y'),0);
+ // Le lave-mains se décrit depuis le sol : sa vasque doit rester à hauteur d'usage (0,80 à 0,85 m).
+ const basin=run('(()=>{const g=furnitureModel({...catalogDraft("lavabo"),r:0});const b=new THREE.Box3().setFromObject(g);disposeGroup(g);return b.max.y;})()');assert.ok(basin>.8&&basin<.9,'vasque à '+basin);
  assert.equal(run('catalogDraft("table2").y'),0);assert.equal(run('catalogDraft("counter").bespoke'),true);
 });
 test('The trade catalogue covers every use of the programme',()=>{
@@ -292,12 +310,12 @@ test('Layout variants are stored, compared and applied without touching the shel
  run('var backupStore=new Map();dbPut=async(k,v)=>{backupStore.set(k,v);return true;};dbGet=async k=>backupStore.get(k)??null;loadAssets=async()=>new Map()');
  run('state=validate(clone(DEFAULT_STATE));selection=null;demo();saveLayoutVariant("Meublee")');
  assert.equal(run('state.variants.length'),1);
- assert.equal(run('state.variants[0].furniture.length'),46);
+ assert.equal(run('state.variants[0].furniture.length'),70);
  run('commit(()=>{state.furniture=[];});saveLayoutVariant("Vide")');
  assert.equal(run('state.variants.length'),2);
  const shell=run('JSON.stringify(state.walls)');
  await run('applyLayoutVariant(state.variants[0].id)');
- assert.equal(run('state.furniture.length'),46);
+ assert.equal(run('state.furniture.length'),70);
  assert.equal(run('JSON.stringify(state.walls)'),shell);
  run('historyStep()');assert.equal(run('state.furniture.length'),0);
 });
@@ -308,7 +326,7 @@ test('Replacing the model keeps a swappable backup that survives the page',async
  run('state=validate(clone(DEFAULT_STATE));state.meta.name="Étude";undoStack.length=0');
  // The undo history is gone (as after a reload), yet the backup brings the work back...
  await run('restoreProjectBackup()');
- assert.equal(run('state.meta.name'),'Mon travail');assert.equal(run('state.furniture.length'),46);
+ assert.equal(run('state.meta.name'),'Mon travail');assert.equal(run('state.furniture.length'),70);
  // ...and the replaced state becomes the new backup, so a mistaken restore is reversible.
  const entry=JSON.parse(run('backupStore.get(projectLocalKey("avant-remplacement"))'));
  assert.equal(JSON.parse(entry.project).meta.name,'Étude');assert.match(entry.reason,/récupération/);
@@ -317,7 +335,7 @@ test('Replacing the model keeps a swappable backup that survives the page',async
  await assert.rejects(()=>run('backupBeforeReplace("test")'),/copie de secours/);
  run('commit(()=>{state.variants=[{id:"v_empty",n:"Vide",date:"",furniture:[],zones:clone(state.zones)}];})');
  await run('applyLayoutVariant("v_empty")');
- assert.equal(run('state.furniture.length'),46);
+ assert.equal(run('state.furniture.length'),70);
  run('dbPut=async(k,v)=>{backupStore.set(k,v);return true;}');
  // Backups written by the previous release under the opening key are still found.
  run('backupStore.clear();backupStore.set(projectLocalKey("avant-ouverture"),JSON.stringify({...clone(DEFAULT_STATE),meta:{name:"Ancienne copie"}}))');
@@ -328,7 +346,7 @@ test('Variant comparison reports the metrics of each layout',()=>{
  const html=run('compareVariants()');
  assert.ok(html.includes('Implantation courante'));
  assert.ok(html.includes('Meublee')&&html.includes('Vide'));
- assert.equal(run('variantMetrics(state.variants[0]).objects'),46);
+ assert.equal(run('variantMetrics(state.variants[0]).objects'),70);
  assert.equal(run('variantMetrics(state.variants[1]).objects'),0);
  assert.equal(run('variantMetrics(state.variants[0]).hard'),0);
 });
@@ -362,7 +380,7 @@ test('Floor textures are repeated at their real-world size',()=>{
  assert.ok(JSON.parse(repeats).every(r=>r>.16&&r<1.7),'repeats '+repeats);
 });
 test('Luminaires light the scene and stay capped',()=>{
- run('state=validate({...clone(DEFAULT_STATE),furniture:Array.from({length:10},(_,i)=>({type:"luminaire",x:16+i*.4,z:3,y:2.15}))});rebuild()');
+ run('state=validate({...clone(DEFAULT_STATE),furniture:Array.from({length:14},(_,i)=>({type:"luminaire",x:15.8+i*.36,z:3,y:2.15}))});rebuild()');
  assert.equal(run('world.children.filter(o=>o.isPointLight).length'),run('LAMP_LIMIT'));
  run('state=validate(clone(DEFAULT_STATE));rebuild()');
  assert.equal(run('world.children.filter(o=>o.isPointLight).length'),0);
@@ -524,6 +542,53 @@ test('The whole floor of the study can be assigned to spaces',()=>{
  const left=run('Arch.area(buildingOutline())-unionInside(state.zones)');
  assert.ok(left<12,'reste '+left.toFixed(1)+' m2 hors zonage');
 });
+test('A mixing console placed from the catalogue lands on the control desk worktop, not on its meter bridge',()=>{
+ run('state=validate(clone(DEFAULT_STATE));selection=null;state.furniture.push({id:"regie_desk",type:"bureauregie",n:"Bureau de régie",x:3,z:3,y:0,r:0,w:1.8,d:.9,h:.9});state=validate(state)');
+ run('placementDraft={...catalogDraft("console"),x:0,z:0,r:0,baseY:0};updatePlacementPoint({x:3,z:3.1})');
+ assert.equal(run('placementDraft.support'),'regie_desk');
+ assert.ok(Math.abs(run('placementDraft.y')-.75)<.001,'plateau à '+run('placementDraft.y'));
+ assert.equal(run('placementValidity(placementDraft)'),'Libre');
+ run('cancelPlacement()');
+});
+test('Dragging a console onto the control desk attaches it, dragging it away puts it back on the floor',()=>{
+ run('state=validate(clone(DEFAULT_STATE));state.furniture.push({id:"regie_desk",type:"bureauregie",n:"Bureau de régie",x:3,z:3,y:0,r:0,w:1.8,d:.9,h:.9},{id:"mix",type:"console",n:"Console",x:3,z:5.5,y:0,r:0,w:1.1,d:.6,h:.2});state=validate(state)');
+ run('state.furniture[1].x=3.2;state.furniture[1].z=3.05;dragSnap(1,{x:3.2,z:3.05});state=validate(state)');
+ assert.equal(run('state.furniture[1].support'),'regie_desk');assert.ok(Math.abs(run('state.furniture[1].y')-.75)<.001);
+ assert.equal(run('Arch.collisions(state).hard.filter(c=>c.b===1||c.a===1).length'),0);
+ run('state.furniture[1].z=5.5;dragSnap(1,{x:3.2,z:5.5});state=validate(state)');
+ assert.equal(run('state.furniture[1].support'),undefined);assert.equal(run('state.furniture[1].y'),0);
+});
+test('Moving the desk carries the console resting on it',()=>{
+ run('state=validate(clone(DEFAULT_STATE));state.furniture.push({id:"regie_desk",type:"bureauregie",n:"Bureau de régie",x:3,z:3,y:0,r:0,w:1.8,d:.9,h:.9},{id:"mix",type:"console",n:"Console",x:3,z:3,y:.75,r:0,w:1.1,d:.6,h:.2,support:"regie_desk"});state=validate(state)');
+ run('transformFurniture([0],clone(state),1,.5);state=validate(state)');
+ assert.equal(run('state.furniture[1].x'),4);assert.equal(run('state.furniture[1].z'),3.5);assert.equal(run('state.furniture[1].support'),'regie_desk');
+});
+test('A wall screen snaps flat against the nearest wall, facing the room',()=>{
+ run('state=validate(clone(DEFAULT_STATE));selection=null;placementDraft={...catalogDraft("ecranmural"),x:0,z:0,r:0,baseY:1.1};updatePlacementPoint({x:3,z:.8})');
+ assert.ok(Math.abs(run('placementPoint.z')-(.11+.04+.004))<.002,'z '+run('placementPoint.z'));
+ assert.ok(Math.abs(run('Math.sin(placementDraft.r)'))<1e-6&&run('Math.cos(placementDraft.r)')>.99,'face vers le sud');
+ assert.equal(run('placementValidity(placementDraft)'),'Libre');
+ run('updatePlacementPoint({x:.7,z:5})');
+ assert.ok(Math.abs(run('placementPoint.x')-(.11+.04+.004))<.002,'x '+run('placementPoint.x'));
+ assert.ok(Math.abs(run('placementDraft.r')-Math.PI/2)<1e-6,'face vers l’est');
+ assert.equal(run('placementValidity(placementDraft)'),'Libre');
+ run('cancelPlacement()');
+});
+test('A wall-mounted object never lands in front of a door opening',()=>{
+ run('state=validate(clone(DEFAULT_STATE));var snapDoor=wallSnap({...catalogDraft("ecranmural"),y:1.1},{x:.5,z:11})');
+ const snapped=run('snapDoor');
+ if(snapped&&Math.abs(snapped.x-.154)<.01)assert.ok(Math.abs(snapped.z-11)>=.7+.72,'devant la porte : '+snapped.z);
+});
+test('Dragging a mirror along a wall keeps it against the wall',()=>{
+ run('state=validate(clone(DEFAULT_STATE));state.furniture.push({id:"m1",type:"miroir",n:"Miroir",x:4,z:.2,y:1,r:0,w:.6,d:.03,h:.9});state=validate(state)');
+ run('state.furniture[0].x=3;state.furniture[0].z=1;dragSnap(0,{x:3,z:1})');
+ assert.ok(Math.abs(run("state.furniture[0].z")-(.11+.015+.004))<.002);assert.equal(run("state.furniture[0].x"),3);
+});
+test('Every catalogue type builds a model inside its catalogue box',()=>{
+ const types=run('Object.keys(FURN_TYPES)');
+ for(const type of types){const size=run(`(()=>{const t=FURN_TYPES["${type}"],g=furnitureModel({type:"${type}",w:t.w,h:t.h,d:t.d,y:0,r:0,c:"#888888"});const b=new THREE.Box3().setFromObject(g).getSize(new THREE.Vector3());disposeGroup(g);return [b.x,b.y,b.z,t.w,t.h,t.d];})()`);
+  for(let k=0;k<3;k++)assert.ok(Math.abs(size[k]-size[k+3])<.002,type+' : '+size.slice(0,3).map(v=>v.toFixed(3))+' ≠ '+size.slice(3));}
+});
 (async()=>{
  for(const [name,fn] of queue){try{await fn();}catch(e){console.error('FAIL '+name);console.error(e);process.exit(1);}tests++;console.log('PASS '+name);}
  console.log('\n'+tests+' checks passed. Renderer is mocked; browser smoke tests are separate.');
@@ -542,3 +607,4 @@ if(process.argv.includes('--write-proposal-v4')){
  fs.writeFileSync(__dirname+'/../Proposition_Hub_Fives_Cail_V4.json',JSON.stringify(valid,null,2));
  console.log('V4 variant saved: 48 objects, no hard collision or blocked door detected.');
 }
+})().catch(e=>{console.error(e);process.exit(1);});

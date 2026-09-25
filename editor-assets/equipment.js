@@ -12,13 +12,32 @@ function furnitureById(id,source=state){return source.furniture.find(f=>f.id===i
 function supportedBy(ids,source=state){const out=[...ids];for(let n=0;n<out.length;n++){const parent=source.furniture[out[n]];if(!parent)continue;source.furniture.forEach((f,i)=>{if(f.support&&f.support===parent.id&&!out.includes(i))out.push(i);});}return out;}
 function supportChainIds(i,source=state){return supportedBy([i],source).map(n=>source.furniture[n].id);}
 function supportCandidates(i){const f=state.furniture[i];if(!f)return [];const banned=new Set(supportChainIds(i));
- return state.furniture.map((s,j)=>({s,j})).filter(({s,j})=>j!==i&&!banned.has(s.id)&&s.h>=.2&&s.y+s.h<=f.y+f.h+.001&&Arch.contains(Arch.footprint(s),{x:f.x,z:f.z}));}
-// Support sous le curseur pendant une pose : le plateau le plus haut qui couvre le point.
-function supportAt(p,ignore=null){let best=null;
- for(const s of state.furniture){if(s.h<.2||s.id===ignore)continue;if(!Arch.contains(Arch.footprint(s),p))continue;
-  const top=s.y+s.h;if(!best||top>best.top)best={s,top};}
+ return state.furniture.map((s,j)=>({s,j})).filter(({s,j})=>j!==i&&!banned.has(s.id)&&canHost(s)&&Arch.contains(Arch.footprint(s),{x:f.x,z:f.z}));}
+// Support sous le curseur : la surface de pose la plus haute qui couvre le point. `ignore` écarte
+// l'objet déplacé et tout ce qui repose sur lui (un meuble ne se pose pas sur son propre contenu).
+function supportAt(p,ignore=null){let best=null;const skip=ignore instanceof Set?ignore:new Set(ignore?[ignore]:[]);
+ for(const s of state.furniture){if(skip.has(s.id)||!canHost(s))continue;if(!Arch.contains(Arch.footprint(s),p))continue;
+  const top=surfaceTop(s);if(!best||top>best.top)best={s,top};}
  return best;}
-function setSupport(i,id){commit(()=>{requireUnlocked([i]);const f=state.furniture[i];if(!id){delete f.support;return;}const s=furnitureById(id);if(!s)throw Error('Support introuvable.');f.support=id;f.y=Math.min(20,s.y+s.h);});}
+// Aimantation murale : dos contre le parement le plus proche, face avant vers la pièce, centré sur
+// la portion de mur disponible. Les ouvertures que l'objet masquerait sont évitées.
+function wallSnap(f,p,reach=1.2){let best=null;const side=frontOf(f)==='+z'||frontOf(f)==='-z',span=side?f.w:f.d,depth=side?f.d:f.w;
+ for(const w of state.walls){const dx=w.x2-w.x1,dz=w.z2-w.z1,L=Math.hypot(dx,dz);if(L<span+.02)continue;const ux=dx/L,uz=dz/L;
+  const along=(p.x-w.x1)*ux+(p.z-w.z1)*uz,off=-(p.x-w.x1)*uz+(p.z-w.z1)*ux,gap=Math.abs(off)-w.t/2;
+  if(gap>reach||along<-.4||along>L+.4)continue;const d=Math.max(span/2,Math.min(L-span/2,along));
+  if(f.y<(w.h??H)&&(w.op||[]).some(o=>Math.abs(o.d-d)<o.w/2+span/2&&f.y<o.sill+o.h&&f.y+f.h>o.sill))continue;
+  if(best&&gap>=best.gap)continue;const sgn=off>=0?1:-1,nx=-uz*sgn,nz=ux*sgn,push=w.t/2+depth/2+.004;
+  best={gap,x:w.x1+ux*d+nx*push,z:w.z1+uz*d+nz*push,nx,nz};}
+ if(!best)return null;return {x:+best.x.toFixed(4),z:+best.z.toFixed(4),r:Math.atan2(best.nx,best.nz)-FRONT_AXES[frontOf(f)].a};}
+// Glisser un objet : un objet mural suit les murs, un objet de plateau se pose sur le meuble survolé,
+// et redescend au sol quand il le quitte.
+function dragSnap(i,p){const f=state.furniture[i];if(!f||f.locked)return;const mount=mountOf(f);
+ if(mount==='mur'){const s=wallSnap(f,{x:p?.x??f.x,z:p?.z??f.z});if(s){f.x=s.x;f.z=s.z;f.r=s.r;}return;}
+ if(mount==='plafond')return;
+ const chain=new Set(supportChainIds(i)),host=mount==='support'||f.support?supportAt({x:f.x,z:f.z},chain):null;
+ if(host){f.support=host.s.id;f.y=+Math.min(20,host.top).toFixed(4);}
+ else if(f.support){delete f.support;f.y=FURN_TYPES[f.type]?.y??0;}}
+function setSupport(i,id){commit(()=>{requireUnlocked([i]);const f=state.furniture[i];if(!id){delete f.support;return;}const s=furnitureById(id);if(!s)throw Error('Support introuvable.');f.support=id;f.y=Math.min(20,surfaceTop(s));});}
 
 // Orienter la face avant à l'opposé du mur le plus proche.
 function nearestWallNormal(f){let best=null;
@@ -60,7 +79,7 @@ async function applyVariant(i,key){if(busy)return;if(!state.furniture[i])return;
 
 function equipmentProperties(){if(selection?.kind!=='furniture')return;const o=selected(),i=selection.i,ids=furnitureIndices();
  const supports=supportCandidates(i),parent=o.support?furnitureById(o.support):null,source=o.type==='custom'?state.assets[o.assetId]:null;
- const supportOptions=supports.map(({s})=>`<option value="${esc(s.id)}" ${o.support===s.id?'selected':''}>${esc(s.n)} · plateau à ${(s.y+s.h).toFixed(2)} m</option>`).join('')
+ const supportOptions=supports.map(({s})=>`<option value="${esc(s.id)}" ${o.support===s.id?'selected':''}>${esc(s.n)} · plateau à ${surfaceTop(s).toFixed(2)} m</option>`).join('')
   +(parent&&!supports.some(({s})=>s.id===parent.id)?`<option value="${esc(parent.id)}" selected>${esc(parent.n)}</option>`:'');
  $('properties').insertAdjacentHTML('beforeend',
   '<h3>Objet &amp; provenance</h3>'
@@ -92,8 +111,8 @@ function equipmentRebuild(){
  // Le lien est visible depuis les deux bouts : l'objet posé comme le meuble porteur.
  if(selection?.kind==='furniture')for(const i of furnitureIndices()){const f=state.furniture[i];
   const s=f.support?furnitureById(f.support):null;
-  if(s)line([[f.x-CX,f.y+.02,f.z-CZ],[s.x-CX,s.y+s.h+.02,s.z-CZ]],0x8a6bbd);
-  for(const c of state.furniture)if(c.support===f.id)line([[c.x-CX,c.y+.02,c.z-CZ],[f.x-CX,f.y+f.h+.02,f.z-CZ]],0x8a6bbd);}
+  if(s)line([[f.x-CX,f.y+.02,f.z-CZ],[s.x-CX,surfaceTop(s)+.02,s.z-CZ]],0x8a6bbd);
+  for(const c of state.furniture)if(c.support===f.id)line([[c.x-CX,c.y+.02,c.z-CZ],[f.x-CX,surfaceTop(f)+.02,f.z-CZ]],0x8a6bbd);}
 }
 function equipmentChecks(){const bespoke=state.furniture.filter(f=>f.bespoke),undocumented=bespoke.filter(f=>!f.ref),stacked=state.furniture.filter(f=>f.support);
  return `<div class="check-result">${state.furniture.length} objet(s) · ${bespoke.length} sur mesure · ${stacked.length} posé(s) sur un support</div>`

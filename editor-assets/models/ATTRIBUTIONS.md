@@ -7,7 +7,7 @@
 - Source : https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/SheenChair
 - Licence fournie : `SheenChair-LICENSE.md`.
 - Adaptation locale : suppression de 15 propriétés `KHR_texture_transform.texCoord` redondantes avec le canal déjà porté par l’objet texture. Ni la géométrie ni les images ne sont modifiées. La version adaptée est `SheenChair-compatible.glb`, embarquée dans `chair.js`. Le fichier `SheenChair.glb` est l’original téléchargé.
-- Le modèle ne représente pas une référence commerciale réelle. Les matériaux avancés de sheen ne sont pas complètement interprétés par Three.js r128.
+- Le modèle ne représente pas une référence commerciale réelle. Les matériaux avancés de sheen sont interprétés par three.js depuis la r186 de l’atelier.
 
 ## SheenWoodLeatherSofa
 
@@ -16,7 +16,7 @@
 - Source : https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/SheenWoodLeatherSofa
 - Licence fournie : `SheenWoodLeatherSofa-LICENSE.md`.
 - Binaire source non modifié ; embarqué en base64 dans `sofa.js` pour le chargement local sans serveur.
-- Les matériaux avancés de sheen/specular ne sont pas complètement interprétés par Three.js r128.
+- Les matériaux avancés de sheen/specular sont interprétés par three.js depuis la r186 de l’atelier.
 
 Les attributions sont reprises dans les données des assets et dans l’inspecteur. Les licences n’accordent pas de droits sur les logos ou marques associés.
 

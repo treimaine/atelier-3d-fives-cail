@@ -16,9 +16,9 @@ Puis <http://127.0.0.1:8766>. Le serveur est limité à la boucle locale.
 node editor-assets/test-editor.cjs
 ```
 
-110 vérifications automatisées : géométrie, contraintes de murs, collisions, circulation, manipulation, sauvegarde, variantes. **Les lancer avant de pousser** — plusieurs verrouillent des acquis de l'étude, par exemple que la proposition livrée reste parcourable à 0,90 m et que tous les poteaux tiennent dans l'emprise.
+124 vérifications automatisées : géométrie, contraintes de murs, collisions, circulation, manipulation, navigation, sauvegarde, variantes. **Les lancer avant de pousser** — plusieurs verrouillent des acquis de l'étude, par exemple que la proposition livrée reste parcourable à 0,90 m et que tous les poteaux tiennent dans l'emprise.
 
-Aucune dépendance à installer : three.js et le client Supabase sont embarqués dans `editor-assets/vendor`.
+Aucune dépendance à installer : three.js r186 et le client Supabase sont embarqués dans `editor-assets/vendor`. three.js n'existe plus qu'en modules ES : `index.html` déclare une carte d'import, `editor-assets/three-boot.js` expose three et ses extensions sous `THREE`, puis charge les scripts de l'éditeur dans l'ordre. Un module ajouté doit être inscrit dans la liste de `three-boot.js`, et dans `test-editor.cjs` s'il est nécessaire aux tests.
 
 Tests du partage : `node --test editor-assets/test-cloud.cjs`.
 
@@ -26,7 +26,8 @@ Tests du partage : `node --test editor-assets/test-cloud.cjs`.
 
 | Fichier | Rôle |
 |---|---|
-| `index.html` | La page : mise en page de l'atelier et ordre de chargement des modules |
+| `index.html` | La page : mise en page de l'atelier, carte d'import de three.js |
+| `editor-assets/three-boot.js` | Chargeur : three r186 et ses extensions sous `THREE`, puis les modules de l'éditeur dans l'ordre |
 | `editor-assets/defaults.js` | L'étude de départ : zonage, murs, poteaux, catalogue d'objets |
 | `editor-assets/architecture-core.js` | Géométrie pure : polygones, collisions, contraintes. Aucune dépendance au DOM |
 | `editor-assets/editor.js` | Validation du projet, rendu three.js, interactions pointeur, imports/exports |
@@ -38,6 +39,9 @@ Tests du partage : `node --test editor-assets/test-cloud.cjs`.
 | `editor-assets/circulation.js` | Contrôle de circulation sur grille et goulets |
 | `editor-assets/project.js` | Sauvegarde IndexedDB, variantes d'implantation, vues, projet partagé |
 | `editor-assets/navigation.js` | Caméras et raccourcis clavier |
+| `editor-assets/catalog-detail.js` | Mobilier détaillé : modèles pièce par pièce, matières PBR, surfaces de pose, objets muraux et complémentaires |
+| `editor-assets/catalog-extra.js` | Catalogue étendu : mobilier d'exploitation par pôle, œuvres, silhouettes d'échelle |
+| `editor-assets/presentation.js` | Mode présentation : visite guidée plein écran, une fiche par espace |
 | `projet.json` | **Le projet partagé** de l'équipe (voir plus bas) |
 
 Les modules partagent une portée globale et se chargent dans l'ordre déclaré par `index.html` : pas de bundler, pas d'étape de build. Modifier un fichier, recharger la page.
@@ -57,7 +61,7 @@ Vercel, préréglage **Other**, aucune commande de build, aucun répertoire de s
 ## Licences
 
 - Supabase JS 2.116.0 : MIT, `editor-assets/vendor/LICENSE-supabase.txt`.
-- three.js r128, chargeur et exportateur glTF : MIT, `editor-assets/vendor/LICENSE-three.txt`.
+- three.js r186 (0.186.1) et ses extensions (glTF, RoomEnvironment, RoundedBoxGeometry, post-traitement GTAO/SMAA) : MIT, `editor-assets/vendor/three/LICENSE.txt`.
 - Modèles détaillés : Khronos glTF-Sample-Assets, CC0 et CC-BY 4.0 selon le modèle. Auteurs et conditions dans `editor-assets/models/ATTRIBUTIONS.md` et les fichiers `*-LICENSE.md`. Les sources `.glb` ne sont pas versionnées : elles se retéléchargent depuis le dépôt Khronos indiqué dans les attributions.
 
 ## Limites assumées

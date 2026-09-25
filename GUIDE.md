@@ -96,6 +96,7 @@ Sept modèles détaillés sont disponibles : les deux premiers modèles, la plan
 - L’outil Main, le clic milieu, le clic droit et Maj + glisser permettent de naviguer au-dessus des objets. En perspective, glisser le fond ou Alt + glisser fait tourner la vue.
 - En plan, glisser suit la souris dans les deux axes ; le zoom à la molette reste centré sur le point sous le curseur.
 - En intérieur, glisser permet de regarder, même au-dessus d’un meuble. Un clic simple permet toujours de sélectionner en mode Sélection. La visite reste libre, sans blocage contre les murs.
+- La rose des vents en bas à droite oriente la perspective vers le nord, l’est, le sud ou l’ouest. Elle disparaît en plan et en intérieur. Les boutons + et − zooment dans les vues extérieures et avancent ou reculent en intérieur.
 
 Les raccourcis s’arrêtent pendant la saisie dans un champ, à la perte de focus ou lorsque l’onglet devient inactif. La navigation ne modifie pas les objets et n’ajoute aucune opération à l’historique du projet. Les positions de caméra sont mémorisées entre les modes, mais pas après rechargement de la page.
 
@@ -341,3 +342,50 @@ Le déploiement actuel se fait directement depuis ce dépôt, sans script de bui
 - **Clic droit** sur un élément, sans glisser : Propriétés, Cadrer, Tourner de 90°, Verrouiller, Dupliquer, Supprimer selon le type ; seules les actions sans modification restent en consultation. Un clic droit glissé déplace toujours la vue.
 - **Variantes et vues** : leur nom se saisit dans le panneau (Entrée pour valider, Échap pour annuler) au lieu d’une fenêtre du navigateur.
 - **Poteau noyé dans un mur** : quand le clic touche la face d’un mur et, juste derrière (moins de 60 cm), un poteau, c’est le poteau qui est saisi, même si le mur était sélectionné. Pour déplacer le mur lui-même, cliquez-le à côté du poteau. Les poignées d’extrémité gardent la priorité.
+
+## Présentation aux investisseurs — 25 septembre 2026
+
+- **Mode présentation** : bouton **▶ Présenter** en haut à droite, ou touche **P**. L'interface disparaît, la maquette passe en plein écran et la caméra enchaîne une vue d'ensemble, un arrêt par espace de plus de 6 m² et une synthèse. Chaque fiche donne la surface, le revêtement, le nombre de places assises et d'éléments, puis la description de l'espace saisie dans l'inspecteur. Passage automatique toutes les 9 secondes ; **←/→** pour naviguer, **Espace** pour la pause, **☾ Soirée** pour l'ambiance luminaires, **Échap** pour quitter. Le projet n'est jamais modifié : affichage, coupe, ambiance et caméra sont rétablis en sortie. Pendant la visite, la coupe est remontée à 2,40 m pour garder œuvres et écrans aux murs.
+- **Éclairage par environnement** : une salle lumineuse générée dans le navigateur, préfiltrée par PMREM, éclaire et fait refléter toutes les matières — métal, verre, velours des modèles détaillés. Pas de fichier HDRI à charger ; variante sombre en ambiance soirée, où les suspensions sont plus intenses.
+- **24 objets ajoutés au catalogue** (52 au total) : tabouret haut, mange-debout, fauteuil lounge, table basse, caisse, menu ardoise ; œuvre encadrée et grand format (toile abstraite générée, toujours identique pour un même objet), banc et sculpture sur socle ; enceinte sur pied, cabine DJ, pied de micro, écran de projection ; console de mixage, batterie, ampli ; fauteuil de bureau, table de réunion, banque d'accueil, écran mural ; tapis, lampadaire éclairant et **silhouette d'échelle**.
+- **Tapis** : un revêtement de moins de 5 cm posé au sol se glisse sous le mobilier ; il est exclu des collisions et des débattements de porte. La hauteur minimale d'un objet passe de 5 cm à 1 cm.
+- **Proposition meublée enrichie** : 70 objets au lieu de 46 — suspensions au-dessus des six tables du salon de thé, tabourets et caisse au comptoir, œuvres, sculpture et tapis dans la galerie, enceintes, micro et silhouette sur la scène, écran mural, tapis et lampadaire au studio podcast. Elle reste sans collision, sans porte gênée et parcourable à 0,90 m, tous espaces desservis.
+
+Validation : 117 tests automatisés, visite complète dans le navigateur intégré (jour et soirée, sortie et rétablissement de l'affichage).
+
+## three.js r186, mobilier détaillé et V.2 meublée — 25 septembre 2026
+
+### Moteur
+
+- **three.js r128 → r186** (0.186.1, archive npm officielle, empreinte vérifiée). Chargement en modules ES par carte d'import et `three-boot.js`. Espace colorimétrique, unités de lumière physiques (intensités ×π), rendu tonal *Neutral*, ombres PCF 4096 px.
+- **Éclairage** : environnement `RoomEnvironment` préfiltré (reflets sur toutes les matières), ciel en dégradé visible par les baies, intensité selon l'ambiance.
+- **Occlusion ambiante (GTAO)** et anticrénelage MSAA ×4, avec une **qualité progressive** : images rapides pendant un mouvement, une image haute qualité dès que la vue s'arrête. Réglage *Affichage → Qualité du rendu* (Haute / Standard), mémorisé sur le poste. Les ombres ne sont recalculées que lorsque la scène change.
+- **Performance** : les pièces de chaque meuble sont fusionnées par matière et le modèle obtenu est mis en cache. Sur la V.2 meublée : 816 appels de dessin au lieu de 4 085, 434 000 triangles au lieu de 1,1 million, reconstruction complète en 34 ms.
+
+### Défauts corrigés
+
+- **Poser un objet sur un meuble** (console de mixage sur le bureau de régie, écran sur un bureau…) : chaque meuble déclare désormais sa **surface de pose** réelle, distincte de sa hauteur hors tout. Un objet de plateau se rattache au meuble survolé **aussi en le glissant**, et redescend au sol quand il le quitte. Un objet posé ne compte plus comme une collision avec son support.
+- **Objets muraux** (écran mural, miroir, panneau acoustique, œuvre, lave-mains, urinoir…) : ils s'**aimantent au mur le plus proche**, dos au parement, face vers la pièce, en pose comme en glissement, et évitent les ouvertures. L'état de pose indique « contre le mur ».
+- **Lave-mains** : il était posé à 0,80 m *sous* sa vasque, qui se retrouvait à 1,55 m. Il se décrit désormais depuis le sol, vasque à 0,85 m.
+- **Chaise et canapé** affichaient des modèles glTF (fauteuil de 0,83 m, canapé de 2,73 m) écrasés dans leurs gabarits de 0,45 m et 1,90 m. Ils ont maintenant des modèles détaillés à leurs proportions ; les glTF restent dans « Modèles détaillés » à leurs vraies cotes.
+- **Comptoir et bureau** débordaient de leur hauteur (machine et écran intégrés, puis écrasés) ; ces équipements sont devenus des objets à poser.
+- **Coupe 1,20 m** : le mobilier est désormais sectionné comme les murs ; rien ne flotte plus au-dessus d'une cloison coupée. Les suspensions restent entières.
+- Les suspensions pendent à un câble jusqu'au plafond ; jusqu'à 12 luminaires éclairent la scène.
+
+### Mobilier
+
+Les 28 types d'origine et 8 du catalogue étendu (tabouret, fauteuil, table basse, mange-debout, caisse, console, écran mural, enceinte) sont remodelés pièce par pièce, dans leurs cotes exactes : arêtes adoucies, tissu velouté teinté, noyer et chêne veinés, marbre, céramique, métal brossé, laque, écrans allumés (session audio, bureautique, image). **24 objets ajoutés (76 au total)** : écran d'ordinateur, ordinateur portable, lampe de bureau, rayonnage ; clavier maître, rack 19", guitare sur stand, piège à basses, diffuseur ; téléviseur, meuble bas ; miroir, miroir de loge éclairé, portant ; urinoir, WC suspendu ; banquette, moulin à café, étagère murale, plan de travail avec évier, four mixte ; table d'atelier, projecteur scénique, vidéoprojecteur.
+
+### Vue intérieure
+
+Les murs et les poteaux arrêtent le visiteur, les portes le laissent passer, et le déplacement glisse le long des parois. **G** : passe-muraille. La grille technique est masquée.
+
+### V.2 meublée
+
+La référence d'équipe V.2 (Bertil GAUTIER, 19/09) est meublée intégralement : **160 objets, 62 places assises**, sans collision. Studio B (batterie, amplis, guitares, clavier, pièges à basses, panneaux), régie (bureau face à la baie, console et enceintes de monitoring sur le plateau, rack), Studio A (cabine voix, table podcast équipée), loge (canapé, TV murale, miroir éclairé, portant), bureaux, sanitaires, ateliers/événementiel (scène, 18 places, enceintes, projecteurs, tables d'atelier, cabine DJ), coffee shop (bar équipé, vitrine, 5 tables rondes, banquettes, mange-debout, suspensions), labo, networking/exposition (œuvres, sculpture, socles, banque d'accueil). La scène, qui mordait la façade nord, est avancée de 13 cm.
+
+Fichier : `Proposition_V2_meublee.json` dans le dossier de travail (hors dépôt), à importer puis à partager comme nouvelle version.
+
+**Points de plan relevés sur la V.2, non modifiés** : six espaces sont inaccessibles à 0,90 m depuis une porte extérieure avant même tout mobilier — Ateliers/Événementiel (la cloison vitrée côté coffee shop n'a pas de porte), le couloir d'accès, les trois bureaux/stockage et la remise, placée hors de l'emprise. Quatre portes heurtent un mur ou un poteau en s'ouvrant : murs 3, 16 et 29 (deux conflits).
+
+Validation : 124 tests automatisés (+7 : console posée sur le bureau de régie depuis le catalogue et par glissement, déplacement emportant la console, écran plaqué et orienté sur deux murs, objets muraux hors ouvertures, glissement d'un miroir le long d'un mur, chaque type construit dans son encombrement). Essais dans le navigateur intégré : pose réelle à la souris de la console et de l'écran mural, visites intérieures jour et soirée, marche contre la façade, les portes et un poteau, présentation plein écran, exports glTF et PNG, import d'un modèle détaillé.

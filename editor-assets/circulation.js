@@ -131,7 +131,7 @@ function circulationTexture(){const c=circulation,g=c.g,canvas=document.createEl
   if(g.grid[k]===1)rgba=[60,66,62,150];
   else if(!g.grid[k])rgba=c.reach[k]?[104,158,118,110]:[198,84,62,120];
   img.data[p]=rgba[0];img.data[p+1]=rgba[1];img.data[p+2]=rgba[2];img.data[p+3]=rgba[3];}
- ctx.putImageData(img,0,0);const t=new THREE.CanvasTexture(canvas);t.magFilter=THREE.NearestFilter;t.encoding=THREE.sRGBEncoding;return t;}
+ ctx.putImageData(img,0,0);const t=new THREE.CanvasTexture(canvas);t.magFilter=THREE.NearestFilter;t.colorSpace=THREE.SRGBColorSpace;return t;}
 
 function circulationRender(){
  if(circulationPlane){circulationPlane.geometry.dispose();circulationPlane.material.map?.dispose();circulationPlane.material.dispose();circulationPlane=null;}
